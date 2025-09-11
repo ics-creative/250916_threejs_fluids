@@ -317,7 +317,7 @@ function frame(time: number) {
   }
 
   // タイムスケールに合わせてシミュレーションステップを実行
-  const stepCount = Math.max(Math.floor(deltaT * 240), 1.0);
+  const stepCount = Math.min(Math.max(Math.floor(deltaT * 240), 1), 8);
   for (let i = 0; i < stepCount; i++) {
     const simulationDeltaT = deltaT / stepCount;
     {
