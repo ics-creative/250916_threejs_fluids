@@ -2,6 +2,8 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   build: {
+    // GitHub Pagesにデモをデプロイするため、ビルド先を標準のdistディレクトリから変更
+    outDir: "docs",
     rollupOptions: {
       input: {
         demo1: "demo1.html",
