@@ -147,7 +147,7 @@ async function init() {
 
   // 背景用テクスチャのロード
   const loader = new THREE.TextureLoader();
-  sourceImageTexture = loader.load("texture.jpg", () => {
+  sourceImageTexture = loader.load("texture_demo2.jpg", () => {
     onWindowResize();
   });
   sourceImageTexture.minFilter = THREE.LinearMipMapLinearFilter;
