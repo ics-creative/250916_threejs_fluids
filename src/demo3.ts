@@ -33,7 +33,7 @@ import { PointerManager } from "./PointerManager.ts";
 
 // シミュレーション用のパラメーター
 const simulationConfig = {
-  // データテクスチャ（格子）の画面サイズ比。大きいほど詳細になるが、負荷が高くなる
+  // データテクスチャー（格子）の画面サイズ比。大きいほど詳細になるが、負荷が高くなる
   pixelRatio: 0.5,
   // 1回のシミュレーションステップで行うヤコビ法の圧力計算の回数。大きいほど安定して正確性が増すが、負荷が高くなる
   solverIteration: 5,
@@ -70,18 +70,18 @@ let dataHeight = Math.round(
 );
 let texelSize = new THREE.Vector2();
 
-// シミューレーション結果を格納するテクスチャ
+// シミューレーション結果を格納するテクスチャー
 let dataTexture: THREE.RenderTarget;
 let dataRenderTarget: THREE.RenderTarget;
 
-// 背景画像に使用するテクスチャ
+// 背景画像に使用するテクスチャー
 let sourceImageTexture: THREE.Texture;
 
-// 背景画像の更新結果を格納するテクスチャ
+// 背景画像の更新結果を格納するテクスチャー
 let imageTexture: THREE.RenderTarget;
 let imageRenderTarget: THREE.RenderTarget;
 
-// シミュレーション及び病害に使用するTSLシェーダーを設定したマテリアル
+// シミュレーション及び描画に使用するTSLシェーダーを設定したマテリアル
 let addForceShader: AddForceNodeMaterial;
 let advectVelShader: AdvectVelocityNodeMaterial;
 let divergenceShader: DivergenceNodeMaterial;
@@ -100,8 +100,9 @@ frame(performance.now());
  */
 async function init() {
   // WebGPURendererの初期化
-  // 本デモはTSL及びNodeMaterialを使用しているため、WebGLRendererは使用不可
-  // 強制的にWebGLで使用したい場合はオプションのforceWebGLをtrueにする
+  // 本デモはTSL及びNodeMaterialを使用しているため、WebGLRendererではなくWebGPURendererを使用する
+  // WebGPURendererはWebGPUが非対応の環境ではフォールバックとしてWebGLで表示される
+  // WebGPURendererで強制的にWebGL表示をしたい場合は、オプションのforceWebGLをtrueにする
   renderer = new WebGPURenderer({ antialias: false, forceWebGL: false });
   await renderer.init();
   renderer.setPixelRatio(window.devicePixelRatio);
@@ -118,7 +119,7 @@ async function init() {
   quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
   scene.add(quad);
 
-  // シミュレーションデータを書き込むテクスチャをピンポン用に2つ作成。
+  // シミュレーションデータを書き込むテクスチャーをPing-Pong用に2つ作成。
   const renderTargetOptions = {
     wrapS: THREE.ClampToEdgeWrapping,
     wrapT: THREE.ClampToEdgeWrapping,
@@ -142,7 +143,7 @@ async function init() {
   clearRenderTarget(dataTexture);
   clearRenderTarget(dataRenderTarget);
 
-  // 背景の更新を書き込むテクスチャをピンポン用に2つ作成。
+  // 背景の更新を書き込むテクスチャーをPing-Pong用に2つ作成。
   const imageRtOptions = {
     wrapS: THREE.ClampToEdgeWrapping,
     wrapT: THREE.ClampToEdgeWrapping,
@@ -178,7 +179,7 @@ async function init() {
   // 確認のためレンダリング用のシェーダーをデバッグ表示
   await debugShader(renderShader);
 
-  // 背景用テクスチャのロード
+  // 背景用テクスチャーのロード
   const loader = new THREE.TextureLoader();
   sourceImageTexture = loader.load("texture_demo3.jpg", () => {
     onWindowResize();
@@ -195,7 +196,7 @@ async function init() {
 
 /**
  * 画面リサイズ時の挙動
- * シミュレーション用のデータテクスチャを画面サイズに応じてリサイズする
+ * シミュレーション用のデータテクスチャーを画面サイズに応じてリサイズする
  */
 function onWindowResize() {
   renderer.setPixelRatio(window.devicePixelRatio);
@@ -217,7 +218,7 @@ function onWindowResize() {
       : 0,
   );
 
-  // シェーダーで使用するデータテクスチャの1ピクセルごとのサイズをシェーダー定数に設定し直す
+  // シェーダーで使用するデータテクスチャーの1ピクセルごとのサイズをシェーダー定数に設定し直す
   texelSize.set(1 / dataWidth, 1 / dataHeight);
   addForceShader.uniforms.uTexelSize.value.copy(texelSize);
   advectVelShader.uniforms.uTexelSize.value.copy(texelSize);
@@ -231,10 +232,10 @@ function onWindowResize() {
   );
   renderShader.uniforms.uTextureSize.value.set(1 / newWidth, 1 / newHeight);
 
-  // 画面サイズに応じて背景用テクスチャを再転送
+  // 画面サイズに応じて背景用テクスチャーを再転送
   blitImage();
 
-  // 背景用テクスチャをセンタリングするためのパラメーターをシェーダー定数に設定
+  // 背景用テクスチャーをセンタリングするためのパラメーターをシェーダー定数に設定
   if (renderShader.uniforms.uImage.value.source?.data) {
     renderShader.uniforms.uImageScale.value.copy(
       getImageScale(
@@ -248,7 +249,7 @@ function onWindowResize() {
 }
 
 /**
- * 背景用テクスチャを画面サイズに応じたテクスチャに転送する
+ * 背景用テクスチャーを画面サイズに応じたテクスチャーに転送する
  */
 function blitImage() {
   // 初期化
@@ -272,7 +273,7 @@ function blitImage() {
 }
 
 /**
- * 画面サイズとテクスチャ催事に応じて縦横比を保ったままセンタリングできるパラメータを取得する
+ * 画面サイズとテクスチャーサイズに応じて縦横比を保ったままセンタリングできるパラメータを取得する
  */
 function getImageScale(
   screenW: number,
@@ -363,7 +364,7 @@ function frame(time: number) {
     }
 
     {
-      // 画素の移流
+      // ピクセルの移流
       const shader = advectImageShader;
       const uniforms = shader.uniforms;
 
@@ -400,7 +401,7 @@ function clearRenderTarget(renderTarget: THREE.RenderTarget) {
 }
 
 /**
- * 指定したNodeMaterialで指定したターゲット（テクスチャかフレームバッファー）にレンダリングする
+ * 指定したNodeMaterialで指定したターゲット（テクスチャーかフレームバッファー）にレンダリングする
  */
 function render(material: NodeMaterial, target: THREE.RenderTarget | null) {
   quad.material = material;
@@ -410,8 +411,8 @@ function render(material: NodeMaterial, target: THREE.RenderTarget | null) {
 }
 
 /**
- * 参照用テクスチャとレンダーターゲット用テクスチャを入れ替える
- * ピンポン用
+ * 参照用テクスチャーとレンダーターゲット用テクスチャーを入れ替える
+ * Ping-Pong用
  */
 function swapTexture() {
   [dataTexture, dataRenderTarget] = [dataRenderTarget, dataTexture];
