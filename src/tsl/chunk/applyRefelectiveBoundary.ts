@@ -1,6 +1,9 @@
 import { float, Fn, If, vec2 } from "three/tsl";
 import type { FloatNode, Vec2Node } from "../types.ts";
 
+/**
+ * 端ピクセル（境界）で法線成分を反転・減衰させる
+ */
 export const applyReflectiveBoundary = Fn(
   ([uv = vec2(), texelSize = vec2(), v = vec2(), e = float(1.0)]: [
     Vec2Node,
@@ -37,24 +40,3 @@ export const applyReflectiveBoundary = Fn(
     return vOut;
   },
 );
-
-// // 元GLSL
-// language=GLSL
-`
-vec2 applyReflectiveBoundary(vec2 uv, vec2 texelSize, vec2 v, float e) {
-  vec2 edgeUV = texelSize * 0.5;
-  if(uv.x <= edgeUV.x && v.x < 0.0) {
-    v.x *= -e;
-  }
-  if(uv.x >= 1.0 - edgeUV.x && v.x > 0.0) {
-    v.x *= -e;
-  }
-  if(uv.y <= edgeUV.y && v.y < 0.0) {
-    v.y *= -e;
-  }
-  if(uv.y >= 1.0 - edgeUV.y && v.y > 0.0) {
-    v.y *= -e;
-  }
-  return v;
-}
-`;

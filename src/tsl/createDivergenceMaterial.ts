@@ -15,6 +15,9 @@ export type DivergenceNodeMaterial = ReturnType<
   typeof createDivergenceNodeMaterial
 >;
 
+/**
+ * Stable Fluidsシミュレーションで速度場の発散を計算するシェーダー
+ */
 export const createDivergenceNodeMaterial = () => {
   // uniforms定義
   const uData = uniformTexture(new THREE.Texture());
@@ -67,24 +70,3 @@ export const createDivergenceNodeMaterial = () => {
     uTexelSize,
   });
 };
-
-// 元GLSL
-// language=GLSL
-`
-precision highp float;
-uniform sampler2D uData;
-uniform vec2 uTexelSize;
-
-void main() {
-  vec2 uv = gl_FragCoord.xy * uTexelSize;
-  vec4 data = texture(uData, uv);
-  
-  float left = sampleNeighborVelocityReflect(uData, uv, uTexelSize, vec2(-1.0, 0.0), data.xy).x;
-  float right = sampleNeighborVelocityReflect(uData, uv, uTexelSize, vec2(1.0, 0.0), data.xy).x;
-  float up = sampleNeighborVelocityReflect(uData, uv, uTexelSize, vec2(0.0, -1.0), data.xy).y;
-  float down = sampleNeighborVelocityReflect(uData, uv, uTexelSize, vec2(0.0, 1.0), data.xy).y;
-  
-  float div = (right - left + down - up) * 0.5;
-  gl_FragColor = vec4(data.xyz, div);
-}
-`;

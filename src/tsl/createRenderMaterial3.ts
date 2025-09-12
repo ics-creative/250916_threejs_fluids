@@ -6,6 +6,10 @@ import { assignUniforms } from "./assifnUniforms.ts";
 
 export type RenderNodeMaterial3 = ReturnType<typeof createRenderMaterial3>;
 
+/**
+ * デモ3でシミューレーション結果に従ってレンダリングを行うシェーダー
+ * 入力テクスチャーをそのままレンダリングする
+ */
 export const createRenderMaterial3 = () => {
   // uniforms定義
   const uImage = uniformTexture(new THREE.Texture());
@@ -30,16 +34,3 @@ export const createRenderMaterial3 = () => {
     uImageScale,
   });
 };
-
-// 元GLSL
-// language=GLSL format=false
-`
-precision highp float;
-uniform sampler2D uImage;
-uniform vec2 uTextureSize;
-uniform vec2 uImageScale;
-
-void main() {
-  gl_FragColor = texture(uImage, gl_FragCoord.xy * uTextureSize);
-}
-`;

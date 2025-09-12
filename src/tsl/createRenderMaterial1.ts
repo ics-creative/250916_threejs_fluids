@@ -17,6 +17,10 @@ import { hsv2rgb } from "./chunk/hsv2rgb.ts";
 
 export type RenderNodeMaterial1 = ReturnType<typeof createRenderMaterial1>;
 
+/**
+ * デモ1でシミューレーション結果に従ってレンダリングを行うシェーダー
+ * 速度場を可視化する
+ */
 export const createRenderMaterial1 = () => {
   // uniforms定義
   const uTexture = uniformTexture(new THREE.Texture());
@@ -53,28 +57,3 @@ export const createRenderMaterial1 = () => {
     uTimeStep,
   });
 };
-
-// 元GLSL
-// language=GLSL format=false
-`
-#define PI 3.14159265359
-
-precision highp float;
-uniform sampler2D uTexture;
-uniform vec2 uTextureSize;
-uniform float uTimeStep;
-
-void main() {
-  vec2 uv = gl_FragCoord.xy * uTextureSize;
-  vec4 data = texture(uTexture, uv);
-  
-  float hueBase = fract(atan(data.y, data.x) * (0.5 / PI));
-  float tri = 1.0 - abs(2.0 * hueBase - 1.0);
-  float hue = tri / 6.0 + uTimeStep;
-  
-  float speed = length(data.xy);
-  float sat = clamp(speed * 40.0, 0.3, 0.9);
-
-  gl_FragColor = vec4(hsv2rgb(hue, sat, 0.9), 1.0);
-}
-`;

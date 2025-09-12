@@ -1,5 +1,8 @@
 import * as THREE from "three";
 
+/**
+ * マウス・タッチイベントを管理して座標を保存するユーテリティー
+ */
 export class PointerManager {
   private pixelRatio = 1.0;
   private flipHeight = 0;

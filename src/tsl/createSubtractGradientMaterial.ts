@@ -16,6 +16,9 @@ export type SubtractGradientNodeMaterial = ReturnType<
   typeof createSubtractGradientMaterial
 >;
 
+/**
+ * Stable Fluidsシミュレーションで速度場から圧力勾配を減算するシェーダー
+ */
 export const createSubtractGradientMaterial = () => {
   // uniforms定義
   const uData = uniformTexture(new THREE.Texture());
@@ -70,26 +73,3 @@ export const createSubtractGradientMaterial = () => {
     uTexelSize,
   });
 };
-
-// 元GLSL
-// language=GLSL
-`
-precision highp float;
-uniform sampler2D uData;
-uniform vec2 uTexelSize;
-
-void main() {
-  vec2 uv = gl_FragCoord.xy * uTexelSize;
-  vec4 data = texture(uData, uv);
-  
-  float left = sampleNeighborPressureNeumann(uData, uv, uTexelSize, vec2(-1.0, 0.0), data.z);
-  float right = sampleNeighborPressureNeumann(uData, uv, uTexelSize, vec2(1.0, 0.0), data.z);
-  float up = sampleNeighborPressureNeumann(uData, uv, uTexelSize, vec2(0.0, -1.0), data.z);
-  float down = sampleNeighborPressureNeumann(uData, uv, uTexelSize, vec2(0.0, 1.0), data.z);
-  
-  vec2 v = data.xy - vec2(right - left, down - up) * 0.5;
-  v = applyReflectiveBoundary(uv, uTexelSize, v, 1.0);
-  
-  gl_FragColor = vec4(v, data.zw);
-}
-`;

@@ -13,6 +13,9 @@ import { mirrorRepeatUV } from "./chunk/mirrorRepeatUV.ts";
 
 export type AdvectDyeNodeMaterial = ReturnType<typeof createAdvectDyeMaterial>;
 
+/**
+ * 速度場に従ってピクセルを移流するシェーダー
+ */
 export const createAdvectDyeMaterial = () => {
   // uniforms定義
   const uData = uniformTexture(new THREE.Texture());
@@ -45,25 +48,3 @@ export const createAdvectDyeMaterial = () => {
     uDeltaT,
   });
 };
-
-// 元GLSL
-// language=GLSL
-`
-precision highp float;
-uniform sampler2D uData;
-uniform sampler2D uImage;
-uniform vec2 uTexelSize;
-uniform vec2 uTextureSize;
-uniform float uDeltaT;
-
-void main() { 
-  vec2 uv = gl_FragCoord.xy * uTextureSize;
-  vec2 v = texture(uData, uv).xy;
-
-  vec2 src = uv - (uDeltaT * v) * uTexelSize * 3.0;
-  src = mirrorRepeatUV(src, uTextureSize);
-  vec3 dye = texture(uImage, src).rgb;
-
-  gl_FragColor = vec4(dye, 1.0);
-}
-`;

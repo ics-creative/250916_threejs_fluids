@@ -16,6 +16,9 @@ import { applyReflectiveBoundary } from "./chunk/applyRefelectiveBoundary.ts";
 
 export type AddForceNodeMaterial = ReturnType<typeof createAddForceMaterial>;
 
+/**
+ * Stable Fluidsシミュレーションで速度に外力を与えるシェーダー
+ */
 export const createAddForceMaterial = () => {
   // uniforms定義
   const uData = uniformTexture(new THREE.Texture());
@@ -55,24 +58,3 @@ export const createAddForceMaterial = () => {
     uForceRadius,
   });
 };
-
-// 元GLSL
-// language=GLSL
-`
-precision highp float;
-uniform sampler2D uData; // (RG: Velocity, B: Pressure, A: divergence)
-uniform vec2 uTexelSize; // (1/Nx, 1/Ny)
-uniform vec2 uForceCenter; // 外力の中心。[0, 1]座標ベース
-uniform vec2 uForceDeltaV; // 外力による速度差分
-uniform float uForceRadius; // 外力の有効半径。テクセル座標ベース
-
-void main() { 
-  vec2 uv = gl_FragCoord.xy * uTexelSize;
-  vec4 data = texture(uData, uv);
-  
-  vec2 nd  = (uv - uForceCenter) / max(vec2(uForceRadius) * uTexelSize, vec2(1e-6));
-  vec2 v = data.xy + uForceDeltaV * exp(-dot(nd, nd));
-  v = applyReflectiveBoundary(uv, uTexelSize, v, 1.0);
-  gl_FragColor = vec4(v, data.zw);
-}
-`;

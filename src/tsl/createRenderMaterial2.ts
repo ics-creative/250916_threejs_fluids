@@ -15,6 +15,10 @@ import { mirrorRepeatUV } from "./chunk/mirrorRepeatUV.ts";
 
 export type RenderNodeMaterial2 = ReturnType<typeof createRenderMaterial2>;
 
+/**
+ * デモ2でシミューレーション結果に従ってレンダリングを行うシェーダー
+ * 入力テクスチャーを速度場に従って歪ませる
+ */
 export const createRenderMaterial2 = () => {
   // uniforms定義
   const uTexture = uniformTexture(new THREE.Texture());
@@ -64,30 +68,3 @@ export const createRenderMaterial2 = () => {
     uImageScale,
   });
 };
-
-// 元GLSL
-// language=GLSL format=false
-`
-precision highp float;
-uniform sampler2D uTexture;
-uniform sampler2D uImage;
-uniform vec2 uTexelSize;
-uniform vec2 uTextureSize;
-uniform vec2 uImageScale;
-
-void main() {
-  vec2 uv = gl_FragCoord.xy * uTextureSize;
-  vec4 data = texture(uTexture, uv);
-  vec3 vp = data.xyz;
-  
-  uv = (uv - 0.5) * uImageScale + 0.5;
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-    return;
-  }
-  vec2 dUV = 1.2 * vp.xy * uTexelSize;
-  vec2 uvB = mirrorRepeatUV(uv - dUV, uTexelSize);
-  vec3 col2 = texture(uImage, uvB).rgb;
-  gl_FragColor = vec4(col2 + vec3(vp.p * 0.01), 1.0);
-}
-`;

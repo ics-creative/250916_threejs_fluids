@@ -17,6 +17,9 @@ export type AdvectVelocityNodeMaterial = ReturnType<
   typeof createAdvectVelocityMaterial
 >;
 
+/**
+ * Stable Fluidsシミュレーションで速度を移流するシェーダー
+ */
 export const createAdvectVelocityMaterial = () => {
   // uniforms定義
   const uData = uniformTexture(new THREE.Texture());
@@ -49,29 +52,3 @@ export const createAdvectVelocityMaterial = () => {
     uDissipation,
   });
 };
-
-// 元GLSL
-// language=GLSL
-`
-precision highp float;
-uniform sampler2D uData;
-uniform vec2 uTexelSize;
-uniform float uDeltaT;
-uniform float uDissipation;
-
-void main() {
-  vec2 uv = gl_FragCoord.xy * uTexelSize;
-  vec4 data = texture(uData, uv);
-  
-  // 前フレームのデータ位置を計算
-  vec2 backUV = uv - data.xy * uDeltaT * uTexelSize;
-  // 位置が境界を超える場合に反射
-  backUV = mirrorRepeatUV(backUV, uTexelSize);
-  // 前フレームの速度を補間して取得
-  vec2 advect = sampleBilinear4(uData, backUV, uTexelSize).xy;
-  // 移流の減衰
-  advect *= uDissipation;
-  advect = applyReflectiveBoundary(uv, uTexelSize, advect, 1.0);
-  gl_FragColor = vec4(advect, data.zw); 
-}
-`;

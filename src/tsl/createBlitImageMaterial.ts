@@ -13,6 +13,9 @@ import { assignUniforms } from "./assifnUniforms.ts";
 
 export type BlitImageNodeMaterial = ReturnType<typeof createBlitImageMaterial>;
 
+/**
+ * テクスチャーをレンダリングするだけのシェーダー
+ */
 export const createBlitImageMaterial = () => {
   // uniforms定義
   const uImage = uniformTexture(new THREE.Texture());
@@ -42,24 +45,3 @@ export const createBlitImageMaterial = () => {
     uImageScale,
   });
 };
-
-// 元GLSL
-// language=GLSL
-`
-precision highp float;
-uniform sampler2D uTexture;
-uniform sampler2D uImage;
-uniform vec2 uTextureSize;
-uniform vec2 uImageScale;
-
-void main() { 
-  vec2 uv = gl_FragCoord.xy * uTextureSize;
-  uv = (uv - 0.5) * uImageScale + 0.5;
-  vec4 color;
-  color = texture(uImage, uv);
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-    color = vec4(0.0, 0.0, 0.0, 1.0);
-  }
-  gl_FragColor = color; 
-}
-`;
