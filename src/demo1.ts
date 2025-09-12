@@ -190,6 +190,7 @@ function onWindowResize() {
 function frame(time: number) {
   const deltaT = (time - previousTime) / 1000;
 
+  // 1. 外力の適用：速度場に外力を加算します。
   if (pointerManager.isPointerDown) {
     // 外力の注入
     const shader = addForceShader;
@@ -216,6 +217,7 @@ function frame(time: number) {
   const stepCount = Math.min(Math.max(Math.floor(deltaT * 240), 1), 8);
   const simulationDeltaT = deltaT / stepCount;
   for (let i = 0; i < stepCount; i++) {
+    // 2. 移流の計算：セミラグランジュ法を使って速度場を補間し、移流を適用します。
     {
       // 速度の移流
       const shader = advectVelShader;
@@ -228,6 +230,7 @@ function frame(time: number) {
       swapTexture();
     }
 
+    // 3. 移流の計算：現在速度と経過時間から前ステップの速度を参照することで移流を適用します。
     {
       // 発散の計算
       const shader = divergenceShader;
@@ -238,6 +241,7 @@ function frame(time: number) {
       swapTexture();
     }
 
+    // 4. 圧力の計算：速度と発散から非圧縮条件を満たすように圧力を計算します。
     for (let i = 0; i < simulationConfig.solverIteration; i++) {
       // 圧力の計算
       const shader = pressureShader;
@@ -248,6 +252,7 @@ function frame(time: number) {
       swapTexture();
     }
 
+    // 5. 速度場の更新：計算された圧力を使って速度場を更新します。
     {
       // 圧力勾配の減算
       const shader = subtractGradientShader;
@@ -259,6 +264,7 @@ function frame(time: number) {
     }
   }
 
+  // 6. 描画：更新された速度場を使って流体の見た目をレンダリングします。
   {
     // 描画
     const shader = renderShader;
