@@ -10,6 +10,7 @@ export default defineConfig({
         demo1: "demo1.html",
         demo2: "demo2.html",
         demo3: "demo3.html",
+        demo4: "demo4.html",
       },
     },
   },

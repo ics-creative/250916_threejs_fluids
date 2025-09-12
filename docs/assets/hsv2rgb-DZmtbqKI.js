@@ -1,0 +1,1 @@
+import{K as m,t as o,Q as s,c as r,U as l,f as b}from"./PointerManager-ZLIzfdCe.js";const f=m(([a=s(1),c=s(1),t=s(1)])=>{const u=o(0,2,1).mul(.3333333333333333).add(a);return r(l(b(u).mul(6).sub(3)).sub(1),0,1).sub(1).mul(c).add(1).mul(t)});export{f as h};
