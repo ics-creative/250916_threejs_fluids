@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import {
   screenCoordinate,
-  select,
   uniform,
   uniformTexture,
   vec2,
@@ -37,22 +36,11 @@ export const createRenderMaterial3 = () => {
 
   const uvScaled = uv.sub(0.5).mul(uImageScale).add(0.5);
 
-  const inX = uvScaled.x
-    .greaterThanEqual(0.0)
-    .and(uvScaled.x.lessThanEqual(1.0));
-  const inY = uvScaled.y
-    .greaterThanEqual(0.0)
-    .and(uvScaled.y.lessThanEqual(1.0));
-  const inBounds = inX.and(inY);
-
   const dUV = vec2(1.2).mul(data.xy).mul(uTexelSize);
   const uvB = mirrorRepeatUV(uvScaled.sub(dUV), uTextureSize);
   const col = uImage.sample(uvB).rgb;
 
-  const colorIn = vec4(col.add(vec3(data.z.mul(0.01))), 1.0);
-  const colorOut = vec4(0.0, 0.0, 0.0, 1.0);
-
-  const fragColor = select(inBounds, colorIn, colorOut);
+  const fragColor = vec4(col.add(vec3(data.z.mul(0.01))), 1.0);
   //========== TSLここまで
 
   // マテリアル作成

@@ -14,7 +14,6 @@ export const createRenderMaterial4 = () => {
   // uniforms定義
   const uImage = uniformTexture(new THREE.Texture());
   const uTextureSize = uniform(new THREE.Vector2());
-  const uImageScale = uniform(new THREE.Vector2(1, 1));
 
   //========== TSLここから
   const uv0 = vec2(screenCoordinate.xy).mul(uTextureSize);
@@ -31,6 +30,5 @@ export const createRenderMaterial4 = () => {
   return assignUniforms(material, {
     uImage,
     uTextureSize,
-    uImageScale,
   });
 };

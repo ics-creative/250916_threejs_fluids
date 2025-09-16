@@ -223,8 +223,8 @@ function getImageScale(
 ) {
   const screenRatio = screenW / screenH;
   const imageRatio = imageW / imageH;
-  const w = screenRatio >= imageRatio ? screenRatio / imageRatio : 1.0;
-  const h = screenRatio >= imageRatio ? 1.0 : imageRatio / screenRatio;
+  const w = screenRatio <= imageRatio ? screenRatio / imageRatio : 1.0;
+  const h = screenRatio <= imageRatio ? 1.0 : imageRatio / screenRatio;
   return new THREE.Vector2(w, h);
 }
 

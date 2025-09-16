@@ -238,18 +238,6 @@ function onWindowResize() {
 
   // 画面サイズに応じて背景用テクスチャーを再転送
   blitImage();
-
-  // 背景用テクスチャーをセンタリングするためのパラメーターをシェーダー定数に設定
-  if (renderShader.uniforms.uImage.value.source?.data) {
-    renderShader.uniforms.uImageScale.value.copy(
-      getImageScale(
-        newWidth,
-        newHeight,
-        renderShader.uniforms.uImage.value.width,
-        renderShader.uniforms.uImage.value.height,
-      ),
-    );
-  }
 }
 
 /**
@@ -289,8 +277,8 @@ function getImageScale(
 ) {
   const screenRatio = screenW / screenH;
   const imageRatio = imageW / imageH;
-  const w = screenRatio >= imageRatio ? screenRatio / imageRatio : 1.0;
-  const h = screenRatio >= imageRatio ? 1.0 : imageRatio / screenRatio;
+  const w = screenRatio <= imageRatio ? screenRatio / imageRatio : 1.0;
+  const h = screenRatio <= imageRatio ? 1.0 : imageRatio / screenRatio;
   return new THREE.Vector2(w, h);
 }
 

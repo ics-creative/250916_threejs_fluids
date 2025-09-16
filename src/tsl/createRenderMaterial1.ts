@@ -1,9 +1,9 @@
 import * as THREE from "three";
+import type { ShaderNodeObject } from "three/tsl";
 import {
   exp,
-  min,
+  max,
   screenCoordinate,
-  step,
   uniform,
   uniformTexture,
   vec2,
@@ -40,21 +40,17 @@ export const createRenderMaterial1 = () => {
   // WebGPUのスクリーン座標系にあわせてYを反転
   const uv = vec2(uv0.x, uv0.y.oneMinus());
 
-  const sampleBGNode = (uvScreen: any) => {
+  const sampleBGNode = (uvScreen: ShaderNodeObject<any>) => {
     const p = vec2(uvScreen).mul(uScreenSizePx);
 
-    const sFit = min(
+    const sFit = max(
       uScreenSizePx.x.div(uBGSizePx.x),
       uScreenSizePx.y.div(uBGSizePx.y),
     );
     const size = vec2(uBGSizePx).mul(sFit);
     const off = vec2(uScreenSizePx).sub(size).mul(0.5);
     const q = vec2(p).sub(off).div(size);
-    const m = step(0.0, q.x)
-      .mul(step(0.0, q.y))
-      .mul(step(q.x, 1.0))
-      .mul(step(q.y, 1.0));
-    return uBackground.sample(q).rgb.mul(m);
+    return uBackground.sample(q).rgb;
   };
 
   // 勾配

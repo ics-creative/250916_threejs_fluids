@@ -1,12 +1,5 @@
 import * as THREE from "three";
-import {
-  screenCoordinate,
-  select,
-  uniform,
-  uniformTexture,
-  vec2,
-  vec4,
-} from "three/tsl";
+import { screenCoordinate, uniform, uniformTexture, vec2 } from "three/tsl";
 import { NodeMaterial } from "three/webgpu";
 import { createClipSpaceVertexNode } from "./chunk/createClipSpaceVertexNode.ts";
 import { assignUniforms } from "./assifnUniforms.ts";
@@ -28,12 +21,7 @@ export const createBlitImageMaterial = (useWebGPUCoordinateSystem: boolean) => {
   const uv1 = useWebGPUCoordinateSystem ? uv0 : vec2(uv0.x, uv0.y.oneMinus());
   const uv = uv1.sub(0.5).mul(uImageScale).add(0.5);
 
-  const inX = uv.x.greaterThanEqual(0.0).and(uv.x.lessThanEqual(1.0));
-  const inY = uv.y.greaterThanEqual(0.0).and(uv.y.lessThanEqual(1.0));
-  const inBounds = inX.and(inY);
-  const colorIn = uImage.sample(uv);
-  const colorOut = vec4(0.0, 0.0, 0.0, 1.0);
-  const fragColor = select(inBounds, colorIn, colorOut);
+  const fragColor = uImage.sample(uv);
   //========== TSLここまで
 
   // マテリアル作成
