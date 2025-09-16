@@ -39,9 +39,9 @@ const simulationConfig = {
   // データテクスチャー（格子）の画面サイズ比。大きいほど詳細になるが、負荷が高くなる
   pixelRatio: 0.5,
   // 1回のシミュレーションステップで行うヤコビ法の圧力計算の回数。大きいほど安定して正確性が増すが、負荷が高くなる
-  solverIteration: 1,
+  solverIteration: 2,
   // マウスを外力として使用する際に影響を与える半径サイズ
-  forceRadius: 50,
+  forceRadius: 40,
   // マウスを外力として使用する際のちからの係数
   forceCoefficient: 500,
   /**
@@ -51,8 +51,10 @@ const simulationConfig = {
    * あくまで粘度っぽさであり、粘性項とは無関係
    */
   dissipation: 0.999,
-  // マウス座標のダンピング時定数（秒）。小さいほど素早く追従し、緩急を感じやすい
-  pointerDampingTau: 0.15,
+  // スプリング（参考実装準拠）
+  pointerSpringK: 0.05, // ばね係数
+  pointerSpringC: 5, // 減衰（0〜1）
+  pointerSpringVisualGain: 1000, // 見た目の追従感向上のための速度
 };
 
 // 時間差分計算用の一時変数
@@ -63,6 +65,8 @@ const pointerManager = new PointerManager();
 let filteredPointer = new THREE.Vector2(-1, -1);
 let prevFilteredPointer = new THREE.Vector2(-1, -1);
 let isPointerFilterActive = false;
+let springTarget = new THREE.Vector2(-1, -1);
+let filteredVelocity = new THREE.Vector2(0, 0);
 
 // Three.jsのレンダリングに必要な一式
 let renderer: WebGPURenderer;
@@ -263,27 +267,45 @@ function onWindowResize() {
 function frame(time: number) {
   const deltaT = (time - previousTime) / 1000;
 
-  // マウス座標のダンピング更新（指数移動平均）
+  // マウス座標のスプリング更新（バネ-ダンパ 2次系, 参考実装形式）
+  // スプリングはマウスダウン中のみ動作（アップでリセット）
   if (pointerManager.isPointerDown) {
-    if (!isPointerFilterActive || filteredPointer.x < 0) {
-      filteredPointer.copy(pointerManager.pointer);
+    if (!isPointerFilterActive) {
+      springTarget.copy(pointerManager.pointer);
+      filteredPointer.copy(springTarget);
       prevFilteredPointer.copy(filteredPointer);
+      filteredVelocity.set(0, 0);
       isPointerFilterActive = true;
     } else {
-      const tau = Math.max(simulationConfig.pointerDampingTau, 1e-4);
-      const alpha = 1.0 - Math.exp(-deltaT / tau);
-      filteredPointer.lerp(
-        pointerManager.pointer,
-        THREE.MathUtils.clamp(alpha, 0, 1),
-      );
+      springTarget.copy(pointerManager.pointer);
+      const k = simulationConfig.pointerSpringK;
+      const c = simulationConfig.pointerSpringC;
+      const visual = simulationConfig.pointerSpringVisualGain;
+      const dt = Math.min(Math.max(deltaT, 0.0), 0.032);
+
+      const diff = springTarget.clone().sub(filteredPointer);
+      const ax = k * diff.x - c * filteredVelocity.x;
+      const ay = k * diff.y - c * filteredVelocity.y;
+
+      filteredVelocity.x += ax * dt;
+      filteredVelocity.y += ay * dt;
+      filteredPointer.x += filteredVelocity.x * dt * visual;
+      filteredPointer.y += filteredVelocity.y * dt * visual;
+
+      // 近傍スナップ（微小振動を即収束）
+      if (diff.lengthSq() < 0.5 * 0.5 && filteredVelocity.lengthSq() < 0.5 * 0.5) {
+        filteredPointer.copy(springTarget);
+        filteredVelocity.set(0, 0);
+      }
     }
   } else {
     isPointerFilterActive = false;
     filteredPointer.set(-1, -1);
     prevFilteredPointer.set(-1, -1);
+    filteredVelocity.set(0, 0);
   }
 
-  if (pointerManager.isPointerDown) {
+  if (isPointerFilterActive) {
     // 外力の注入
     const shader = addForceShader;
     const uniforms = shader.uniforms;
@@ -353,7 +375,7 @@ function frame(time: number) {
     }
   }
 
-  if (pointerManager.isPointerDown) {
+  if (isPointerFilterActive) {
     // インクの注入
     const shader = injectDyeShader;
     const uniforms = shader.uniforms;
