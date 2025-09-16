@@ -39,24 +39,30 @@ const simulationConfig = {
   // データテクスチャー（格子）の画面サイズ比。大きいほど詳細になるが、負荷が高くなる
   pixelRatio: 0.5,
   // 1回のシミュレーションステップで行うヤコビ法の圧力計算の回数。大きいほど安定して正確性が増すが、負荷が高くなる
-  solverIteration: 5,
+  solverIteration: 1,
   // マウスを外力として使用する際に影響を与える半径サイズ
   forceRadius: 50,
   // マウスを外力として使用する際のちからの係数
-  forceCoefficient: 1000,
+  forceCoefficient: 500,
   /**
    * 移流時の減衰
    * 1.0に近づけることで高粘度な流体のような見た目にできる
    * 1以上にはしない
    * あくまで粘度っぽさであり、粘性項とは無関係
    */
-  dissipation: 0.998,
+  dissipation: 0.999,
+  // マウス座標のダンピング時定数（秒）。小さいほど素早く追従し、緩急を感じやすい
+  pointerDampingTau: 0.15,
 };
 
 // 時間差分計算用の一時変数
 let previousTime = 0.0;
 // マウス・タッチイベントを管理するオブジェクト
 const pointerManager = new PointerManager();
+// ダンピング適用後のフィルタ座標
+let filteredPointer = new THREE.Vector2(-1, -1);
+let prevFilteredPointer = new THREE.Vector2(-1, -1);
+let isPointerFilterActive = false;
 
 // Three.jsのレンダリングに必要な一式
 let renderer: WebGPURenderer;
@@ -108,7 +114,7 @@ async function init() {
   // 本デモはTSL及びNodeMaterialを使用しているため、WebGLRendererではなくWebGPURendererを使用する
   // WebGPURendererはWebGPUが非対応の環境ではフォールバックとしてWebGLで表示される
   // WebGPURendererで強制的にWebGL表示をしたい場合は、オプションのforceWebGLをtrueにする
-  renderer = new WebGPURenderer({ antialias: false, forceWebGL: false });
+  renderer = new WebGPURenderer({ antialias: true, forceWebGL: false });
   await renderer.init();
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -257,21 +263,41 @@ function onWindowResize() {
 function frame(time: number) {
   const deltaT = (time - previousTime) / 1000;
 
+  // マウス座標のダンピング更新（指数移動平均）
+  if (pointerManager.isPointerDown) {
+    if (!isPointerFilterActive || filteredPointer.x < 0) {
+      filteredPointer.copy(pointerManager.pointer);
+      prevFilteredPointer.copy(filteredPointer);
+      isPointerFilterActive = true;
+    } else {
+      const tau = Math.max(simulationConfig.pointerDampingTau, 1e-4);
+      const alpha = 1.0 - Math.exp(-deltaT / tau);
+      filteredPointer.lerp(
+        pointerManager.pointer,
+        THREE.MathUtils.clamp(alpha, 0, 1),
+      );
+    }
+  } else {
+    isPointerFilterActive = false;
+    filteredPointer.set(-1, -1);
+    prevFilteredPointer.set(-1, -1);
+  }
+
   if (pointerManager.isPointerDown) {
     // 外力の注入
     const shader = addForceShader;
     const uniforms = shader.uniforms;
 
-    // マウスの移動距離から速度の変化を計算
-    const deltaV = pointerManager.pointer
+    // ダンピング後の移動距離から速度の変化を計算
+    const deltaV = filteredPointer
       .clone()
-      .sub(pointerManager.prevPointer)
+      .sub(prevFilteredPointer)
       .multiply(texelSize)
       .multiplyScalar(simulationConfig.forceCoefficient)
       .multiplyScalar(window.devicePixelRatio);
     uniforms.uData.value = dataTexture.texture;
     uniforms.uForceCenter.value.copy(
-      pointerManager.pointer.clone().multiply(texelSize),
+      filteredPointer.clone().multiply(texelSize),
     );
     uniforms.uForceDeltaV.value.copy(deltaV);
     uniforms.uForceRadius.value = simulationConfig.forceRadius;
@@ -334,7 +360,7 @@ function frame(time: number) {
 
     uniforms.uImage.value = imageTexture.texture;
     uniforms.uForceCenter.value.copy(
-      pointerManager.pointer.clone().multiply(texelSize),
+      filteredPointer.clone().multiply(texelSize),
     );
     uniforms.uForceRadius.value =
       simulationConfig.forceRadius * window.devicePixelRatio;
@@ -352,8 +378,8 @@ function frame(time: number) {
     uniforms.uImage.value = imageTexture.texture;
     uniforms.uData.value = dataTexture.texture;
     uniforms.uDeltaT.value = deltaT;
-    uniforms.uDyeAdvectScale.value = 15;
-    uniforms.uHalfLife.value = 0.3;
+    uniforms.uDyeAdvectScale.value = 10;
+    uniforms.uHalfLife.value = 0.15;
 
     render(shader, imageRenderTarget);
     [imageTexture, imageRenderTarget] = [imageRenderTarget, imageTexture];
@@ -365,15 +391,24 @@ function frame(time: number) {
     const uniforms = shader.uniforms;
 
     uniforms.uDye.value = imageTexture.texture;
-    uniforms.uRefractAmp.value = 0.8;
-    uniforms.uDensityK.value = 0.2;
-    uniforms.uSmokeGain.value = 0.9;
+    uniforms.uRefractAmp.value = 1.6; // 歪みの強さ
+    // マルチスケール屈折の半径と減衰
+    uniforms.uRefractRadius.value = 2.0; // 範囲を広げる
+    uniforms.uRefractFalloff.value = 0.6; // 大半径の寄与も残す
+    uniforms.uDensityK.value = 0.5;   // 吸収を弱めて薄さを改善
+    uniforms.uSmokeGain.value = 0.7;  // 白の寄与を少し戻す
+    // 加算合成の強さ（以前のオーバーレイ用のユニフォームを流用）
+    uniforms.uOverlayStrength.value = 1.1; // 加算を強める
+    uniforms.uOverlayGain.value = 1.4;
 
     render(shader, null);
   }
 
   // 次のフレームに備えて後処理
   pointerManager.updatePreviousPointer();
+  if (isPointerFilterActive) {
+    prevFilteredPointer.copy(filteredPointer);
+  }
   previousTime = time;
   requestAnimationFrame(frame);
 }
