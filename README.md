@@ -9,6 +9,7 @@ ICS MEDIA「[誰でも使える！ Three.jsでウェブサイトに2D流体表�
 - [流体シミュレーションデモ1 速度場の可視化](https://ics-creative.github.io/250912_threejs_fluids/demo1.html)
 - [流体シミュレーションデモ2 速度場に合わせて画像ワープ](https://ics-creative.github.io/250912_threejs_fluids/demo2.html)
 - [流体シミュレーションデモ3 ピクセルの移動](https://ics-creative.github.io/250912_threejs_fluids/demo3.html)
+- [流体シミュレーションデモ4 煙と背景の合成](https://ics-creative.github.io/250912_threejs_fluids/demo4.html)
 
 ## デモのアレンジ
 

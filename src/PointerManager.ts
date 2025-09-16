@@ -3,24 +3,23 @@ import * as THREE from "three";
 /**
  * マウス・タッチイベントを管理して座標を保存するユーテリティー
  */
-export class PointerManager {
+export class PointerManager extends EventTarget {
+  private hasInteracted = false;
   private pixelRatio = 1.0;
   private flipHeight = 0;
   public pointer = new THREE.Vector2(-1, -1);
   public prevPointer = new THREE.Vector2(-1, -1);
   public isPointerDown = false;
 
-  constructor() {}
-
-  public init() {
-    window.addEventListener("mousedown", this.onPointerDown);
-    window.addEventListener("mousemove", this.onPointerMove);
-    window.addEventListener("mouseup", this.onPointerUp);
-    window.addEventListener("touchstart", this.onTouchStart, {
+  public init(target: HTMLElement) {
+    target.addEventListener("mousedown", this.onPointerDown);
+    target.addEventListener("mousemove", this.onPointerMove);
+    target.addEventListener("mouseup", this.onPointerUp);
+    target.addEventListener("touchstart", this.onTouchStart, {
       passive: false,
     });
-    window.addEventListener("touchmove", this.onTouchMove, { passive: false });
-    window.addEventListener("touchend", this.onTouchEnd, { passive: false });
+    target.addEventListener("touchmove", this.onTouchMove, { passive: false });
+    target.addEventListener("touchend", this.onTouchEnd, { passive: false });
   }
 
   public resizeTarget(pixelRatio: number, flipHeight: number) {
@@ -33,6 +32,11 @@ export class PointerManager {
   }
 
   private onPointerDown = (event: MouseEvent) => {
+    if (!this.hasInteracted) {
+      this.hasInteracted = true;
+      this.dispatchEvent(new Event("firstInteraction"));
+    }
+
     this.isPointerDown = true;
     this.updatePointer(event.clientX, event.clientY);
     this.prevPointer.copy(this.pointer);
@@ -50,6 +54,12 @@ export class PointerManager {
 
   private onTouchStart = (event: TouchEvent) => {
     event.preventDefault();
+
+    if (!this.hasInteracted) {
+      this.hasInteracted = true;
+      this.dispatchEvent(new Event("firstInteraction"));
+    }
+
     this.isPointerDown = true;
     const touch = event.touches[0];
     this.updatePointer(touch.clientX, touch.clientY);
@@ -74,4 +84,18 @@ export class PointerManager {
     const y = this.flipHeight > 0 ? this.flipHeight - yBase : yBase;
     this.pointer.set(x, y);
   };
+}
+
+export interface PointerManager {
+  addEventListener(
+    type: "firstInteraction",
+    listener: (this: PointerManager, event: Event) => any,
+    options?: boolean | AddEventListenerOptions,
+  ): void;
+
+  removeEventListener(
+    type: "firstInteraction",
+    listener: (this: PointerManager, event: Event) => any,
+    options?: boolean | EventListenerOptions,
+  ): void;
 }

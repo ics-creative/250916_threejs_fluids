@@ -150,7 +150,7 @@ async function init() {
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
     format: THREE.RGBAFormat,
-    type: THREE.FloatType,
+    type: THREE.HalfFloatType,
     depthBuffer: false,
     stencilBuffer: false,
   };
@@ -190,7 +190,11 @@ async function init() {
 
   // イベントの登録・初期化時点でのサイズ設定処理
   window.addEventListener("resize", onWindowResize);
-  pointerManager.init();
+  pointerManager.init(renderer.domElement);
+  pointerManager.addEventListener("firstInteraction", () => {
+    (document.querySelector("#overlay-hint") as HTMLElement)!.style.display =
+      "none";
+  });
   onWindowResize();
 }
 
@@ -253,7 +257,9 @@ function onWindowResize() {
  */
 function blitImage() {
   // 初期化
-  const shader = createBlitImageMaterial();
+  const shader = createBlitImageMaterial(
+    renderer.backend.coordinateSystem === THREE.WebGPUCoordinateSystem,
+  );
   const uniforms = shader.uniforms;
 
   uniforms.uImage.value = sourceImageTexture;

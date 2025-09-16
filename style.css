@@ -1,0 +1,27 @@
+body {
+  margin: 0;
+}
+#overlay-hint {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+.overlay-content {
+  text-align: center;
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: rgba(20, 20, 20, 0.55);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  max-width: 80vw;
+  box-sizing: border-box;
+  text-wrap: balance;
+}
+.overlay-content p {
+  margin: 0;
+  font-size: 16px;
+  color: #fff;
+}

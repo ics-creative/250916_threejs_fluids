@@ -46,7 +46,7 @@ export const createRenderMaterial2 = () => {
   const inBounds = inX.and(inY);
 
   const dUV = vec2(1.2).mul(data.xy).mul(uTexelSize);
-  const uvB = mirrorRepeatUV(uvScaled.sub(dUV), uTexelSize);
+  const uvB = mirrorRepeatUV(uvScaled.sub(dUV), uTextureSize);
   const col = uImage.sample(uvB).rgb;
 
   const colorIn = vec4(col.add(vec3(data.z.mul(0.01))), 1.0);

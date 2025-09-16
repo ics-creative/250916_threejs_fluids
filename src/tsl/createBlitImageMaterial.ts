@@ -16,7 +16,7 @@ export type BlitImageNodeMaterial = ReturnType<typeof createBlitImageMaterial>;
 /**
  * テクスチャーをレンダリングするだけのシェーダー
  */
-export const createBlitImageMaterial = () => {
+export const createBlitImageMaterial = (useWebGPUCoordinateSystem: boolean) => {
   // uniforms定義
   const uImage = uniformTexture(new THREE.Texture());
   const uTextureSize = uniform(new THREE.Vector2());
@@ -24,7 +24,9 @@ export const createBlitImageMaterial = () => {
 
   //========== TSLここから
   const uv0 = vec2(screenCoordinate.xy).mul(uTextureSize);
-  const uv = uv0.sub(0.5).mul(uImageScale).add(0.5);
+  // WebGL動作の場合はY反転する
+  const uv1 = useWebGPUCoordinateSystem ? uv0 : vec2(uv0.x, uv0.y.oneMinus());
+  const uv = uv1.sub(0.5).mul(uImageScale).add(0.5);
 
   const inX = uv.x.greaterThanEqual(0.0).and(uv.x.lessThanEqual(1.0));
   const inY = uv.y.greaterThanEqual(0.0).and(uv.y.lessThanEqual(1.0));

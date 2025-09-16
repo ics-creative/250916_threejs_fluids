@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>流体シミュレーションデモ2 速度場に合わせて画像ワープ</title>
-    <style>
-      body{
-        margin: 0;
-      }
-    </style>
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div id="app"></div>
+    <div id="overlay-hint" aria-live="polite">
+      <div class="overlay-content">
+        <p>このデモはマウスドラッグ・タッチ操作で動かせます</p>
+      </div>
+    </div>
     <script type="module" src="/src/demo2.ts"></script>
   </body>
 </html>
