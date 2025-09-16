@@ -11,7 +11,7 @@ import { PointerManager } from "./PointerManager";
 import { createInjectDyeMaterial } from "./tsl/createInjectDyeMaterial";
 
 // シミュレーション用のパラメーター
-const simulationConfig = {
+const config = {
   // データテクスチャー（格子）の画面サイズ比。大きいほど詳細になるが、負荷が高くなる
   pixelRatio: 0.5,
   // 1回のシミュレーションステップで行うヤコビ法の圧力計算の回数。大きいほど安定して正確性が増すが、負荷が高くなる
@@ -53,17 +53,10 @@ let radiusAnimStartTimeSec = 0.0;
 let radiusAnimDuration = 0.0;
 let wasPointerDown = false;
 const lastInjectPointer = new THREE.Vector2(-1, -1);
-const lastActiveFilteredPointer = new THREE.Vector2(-1, -1);
 
-// Three.jsのレンダリングに必要な一式
-
-// シミュレーションのサイズ定義。画面リサイズに応じて変更する。よく使用するので変数化しておく
-let dataWidth = Math.round(
-  window.innerWidth * window.devicePixelRatio * simulationConfig.pixelRatio,
-);
-let dataHeight = Math.round(
-  window.innerHeight * window.devicePixelRatio * simulationConfig.pixelRatio,
-);
+// シミュレーションのサイズ
+let dataWidth = 0;
+let dataHeight = 0;
 const texelSize = new THREE.Vector2();
 const screenSize = new THREE.Vector2();
 
@@ -71,26 +64,18 @@ const screenSize = new THREE.Vector2();
 let dataTexture: THREE.RenderTarget;
 let dataRenderTarget: THREE.RenderTarget;
 
-// 背景画像に使用するテクスチャー
-
 // 背景画像の更新結果を格納するテクスチャー
 let imageTexture: THREE.RenderTarget;
 let imageRenderTarget: THREE.RenderTarget;
 
 // シミュレーション及び描画に使用するTSLシェーダーを設定したマテリアル
 
-// 初期化
-// WebGPURendererの初期化
-// 本デモはTSL及びNodeMaterialを使用しているため、WebGLRendererではなくWebGPURendererを使用する
-// WebGPURendererはWebGPUが非対応の環境ではフォールバックとしてWebGLで表示される
-// WebGPURendererで強制的にWebGL表示をしたい場合は、オプションのforceWebGLをtrueにする
-const renderer = new WebGPURenderer({ antialias: true, forceWebGL: false });
+const renderer = new WebGPURenderer({ antialias: true });
 await renderer.init();
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(devicePixelRatio);
+renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// Three.js用のシーンとカメラを作成
 // カメラは透視投影の必要がないのでOrthographicCamera
 const scene = new THREE.Scene();
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -101,16 +86,7 @@ const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
 scene.add(quad);
 
 // シミュレーションデータを書き込むテクスチャーをPing-Pong用に2つ作成。
-const renderTargetOptions = {
-  wrapS: THREE.ClampToEdgeWrapping,
-  wrapT: THREE.ClampToEdgeWrapping,
-  minFilter: THREE.NearestFilter,
-  magFilter: THREE.NearestFilter,
-  format: THREE.RGBAFormat,
-  type: THREE.FloatType,
-  depthBuffer: false,
-  stencilBuffer: false,
-};
+const renderTargetOptions = { type: THREE.FloatType };
 dataTexture = new THREE.RenderTarget(
   dataWidth,
   dataHeight,
@@ -125,26 +101,9 @@ clearRenderTarget(dataTexture);
 clearRenderTarget(dataRenderTarget);
 
 // 背景の更新を書き込むテクスチャーをPing-Pong用に2つ作成。
-const imageRtOptions = {
-  wrapS: THREE.ClampToEdgeWrapping,
-  wrapT: THREE.ClampToEdgeWrapping,
-  minFilter: THREE.LinearFilter,
-  magFilter: THREE.LinearFilter,
-  format: THREE.RGBAFormat,
-  type: THREE.HalfFloatType,
-  depthBuffer: false,
-  stencilBuffer: false,
-};
-imageTexture = new THREE.RenderTarget(
-  window.innerWidth,
-  window.innerHeight,
-  imageRtOptions,
-);
-imageRenderTarget = new THREE.RenderTarget(
-  window.innerWidth,
-  window.innerHeight,
-  imageRtOptions,
-);
+const optionB = { type: THREE.HalfFloatType };
+imageTexture = new THREE.RenderTarget(innerWidth, innerHeight, optionB);
+imageRenderTarget = new THREE.RenderTarget(innerWidth, innerHeight, optionB);
 
 // シミュレーションで使用するシェーダーを作成
 const addForceShader = createAddForceMaterial();
@@ -158,8 +117,14 @@ const injectDyeShader = createInjectDyeMaterial();
 const advectImageShader = createAdvectSmokeDyeMaterial();
 const renderShader = createRenderMaterial1();
 
-// 確認のためレンダリング用のシェーダーをデバッグ表示
-await debugShader(renderShader);
+// 固定パラメータは初期化時に設定
+renderShader.uniforms.uRefractAmp.value = 1.6;
+renderShader.uniforms.uRefractRadius.value = 2.0;
+renderShader.uniforms.uRefractFalloff.value = 0.6;
+renderShader.uniforms.uDensityK.value = 0.5;
+renderShader.uniforms.uSmokeGain.value = 0.7;
+renderShader.uniforms.uOverlayStrength.value = 1.1;
+renderShader.uniforms.uOverlayGain.value = 1.4;
 
 // 背景用テクスチャーのロード
 const loader = new THREE.TextureLoader();
@@ -172,11 +137,10 @@ sourceImageTexture.colorSpace = THREE.SRGBColorSpace;
 renderShader.uniforms.uBackground.value = sourceImageTexture;
 
 // イベントの登録・初期化時点でのサイズ設定処理
-window.addEventListener("resize", onWindowResize);
+addEventListener("resize", onWindowResize);
 pointerManager.init(renderer.domElement);
 pointerManager.addEventListener("firstInteraction", () => {
-  const element = document.querySelector<HTMLElement>("#overlay-hint")!;
-  element.style.display = "none";
+  document.querySelector<HTMLElement>("#overlay-hint")!.style.display = "none";
 });
 onWindowResize();
 
@@ -185,20 +149,20 @@ onWindowResize();
  * シミュレーション用のデータテクスチャーを画面サイズに応じてリサイズする
  */
 function onWindowResize() {
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(devicePixelRatio);
+  renderer.setSize(innerWidth, innerHeight);
 
-  const newWidth = window.innerWidth * window.devicePixelRatio;
-  const newHeight = window.innerHeight * window.devicePixelRatio;
-  dataWidth = Math.round(newWidth * simulationConfig.pixelRatio);
-  dataHeight = Math.round(newHeight * simulationConfig.pixelRatio);
+  const newWidth = innerWidth * devicePixelRatio;
+  const newHeight = innerHeight * devicePixelRatio;
+  dataWidth = Math.round(newWidth * config.pixelRatio);
+  dataHeight = Math.round(newHeight * config.pixelRatio);
   dataTexture.setSize(dataWidth, dataHeight);
   dataRenderTarget.setSize(dataWidth, dataHeight);
   imageTexture.setSize(newWidth, newHeight);
   imageRenderTarget.setSize(newWidth, newHeight);
   // WebGPU座標系の場合はポインタのY座標を反転する
   pointerManager.resizeTarget(
-    simulationConfig.pixelRatio,
+    config.pixelRatio,
     renderer.backend.coordinateSystem === THREE.WebGPUCoordinateSystem
       ? dataHeight
       : 0,
@@ -221,6 +185,178 @@ function onWindowResize() {
   renderShader.uniforms.uScreenSizePx.value.set(newWidth, newHeight);
 }
 
+//================ ヘルパー関数 ================
+function easeOutCubic(t: number) {
+  return 1.0 - Math.pow(1.0 - t, 3.0);
+}
+
+function updateRadius(nowSec: number) {
+  if (radiusAnimDuration <= 0.0) return;
+  const tRaw = Math.min(
+    Math.max((nowSec - radiusAnimStartTimeSec) / radiusAnimDuration, 0.0),
+    1.0,
+  );
+  const t = easeOutCubic(tRaw);
+  radiusAnimCurrent = radiusAnimStart + (radiusAnimEnd - radiusAnimStart) * t;
+}
+
+function updateSpring(deltaT: number) {
+  if (pointerManager.isPointerDown) {
+    if (!isPointerFilterActive) {
+      springTarget.copy(pointerManager.pointer);
+      filteredPointer.copy(springTarget);
+      prevFilteredPointer.copy(filteredPointer);
+      filteredVelocity.set(0, 0);
+      isPointerFilterActive = true;
+    }
+    springTarget.copy(pointerManager.pointer);
+  }
+
+  if (isPointerFilterActive) {
+    const k = config.pointerSpringK;
+    const c = config.pointerSpringC;
+    const visual = config.pointerSpringVisualGain;
+    const dt = Math.min(Math.max(deltaT, 0.0), 0.032);
+
+    const diff = springTarget.clone().sub(filteredPointer);
+    const ax = k * diff.x - c * filteredVelocity.x;
+    const ay = k * diff.y - c * filteredVelocity.y;
+
+    filteredVelocity.x += ax * dt;
+    filteredVelocity.y += ay * dt;
+    filteredPointer.x += filteredVelocity.x * dt * visual;
+    filteredPointer.y += filteredVelocity.y * dt * visual;
+
+    if (
+      diff.lengthSq() < 0.5 * 0.5 &&
+      filteredVelocity.lengthSq() < 0.5 * 0.5
+    ) {
+      filteredPointer.copy(springTarget);
+      filteredVelocity.set(0, 0);
+    }
+
+    lastInjectPointer.copy(filteredPointer);
+
+    if (
+      !pointerManager.isPointerDown &&
+      radiusAnimCurrent <= 0.001 &&
+      filteredVelocity.lengthSq() < 0.0001
+    ) {
+      isPointerFilterActive = false;
+      filteredPointer.set(-1, -1);
+      prevFilteredPointer.set(-1, -1);
+      filteredVelocity.set(0, 0);
+    }
+  }
+}
+
+function renderToData(material: NodeMaterial) {
+  render(material, dataRenderTarget);
+  swapTexture();
+}
+
+function renderToImage(material: NodeMaterial) {
+  render(material, imageRenderTarget);
+  [imageTexture, imageRenderTarget] = [imageRenderTarget, imageTexture];
+}
+
+function applyExternalForce() {
+  if (!isPointerFilterActive) return;
+  const shader = addForceShader;
+  const uniforms = shader.uniforms;
+
+  const deltaV = filteredPointer
+    .clone()
+    .sub(prevFilteredPointer)
+    .multiply(texelSize)
+    .multiplyScalar(config.forceCoefficient)
+    .multiplyScalar(devicePixelRatio);
+  uniforms.uData.value = dataTexture.texture;
+  uniforms.uForceCenter.value.copy(filteredPointer.clone().multiply(texelSize));
+  uniforms.uForceDeltaV.value.copy(deltaV);
+  uniforms.uForceRadius.value =
+    config.forceRadius * Math.max(radiusAnimCurrent, 0.0);
+
+  renderToData(shader);
+}
+
+function simulate(deltaT: number) {
+  const stepCount = Math.min(Math.max(Math.floor(deltaT * 240), 1), 8);
+  for (let i = 0; i < stepCount; i++) {
+    const simulationDeltaT = deltaT / stepCount;
+    {
+      const shader = advectVelShader;
+      const uniforms = shader.uniforms;
+      uniforms.uData.value = dataTexture.texture;
+      uniforms.uDeltaT.value = simulationDeltaT;
+      uniforms.uDissipation.value = config.dissipation;
+      renderToData(shader);
+    }
+    {
+      const shader = divergenceShader;
+      shader.uniforms.uData.value = dataTexture.texture;
+      renderToData(shader);
+    }
+    for (let j = 0; j < config.solverIteration; j++) {
+      const shader = pressureShader;
+      shader.uniforms.uData.value = dataTexture.texture;
+      renderToData(shader);
+    }
+    {
+      const shader = subtractGradientShader;
+      shader.uniforms.uData.value = dataTexture.texture;
+      renderToData(shader);
+    }
+  }
+}
+
+function injectDye() {
+  const shader = injectDyeShader;
+  const uniforms = shader.uniforms;
+
+  uniforms.uImage.value = imageTexture.texture;
+  const injectCenter = (
+    isPointerFilterActive ? filteredPointer : lastInjectPointer
+  )
+    .clone()
+    .multiply(texelSize);
+  uniforms.uForceCenter.value.copy(injectCenter);
+  uniforms.uForceRadius.value =
+    config.forceRadius * devicePixelRatio * Math.max(radiusAnimCurrent, 0.0);
+  uniforms.uInjectGain.value = 50;
+
+  renderToImage(shader);
+}
+
+function advectDye(deltaT: number) {
+  const shader = advectImageShader;
+  const uniforms = shader.uniforms;
+
+  uniforms.uImage.value = imageTexture.texture;
+  uniforms.uData.value = dataTexture.texture;
+  uniforms.uDeltaT.value = deltaT;
+  uniforms.uDyeAdvectScale.value = 10;
+  uniforms.uHalfLife.value = 0.15;
+
+  renderToImage(shader);
+}
+
+function compose() {
+  const shader = renderShader;
+  const uniforms = shader.uniforms;
+
+  uniforms.uDye.value = imageTexture.texture;
+  uniforms.uRefractAmp.value = 1.6;
+  uniforms.uRefractRadius.value = 2.0;
+  uniforms.uRefractFalloff.value = 0.6;
+  uniforms.uDensityK.value = 0.5;
+  uniforms.uSmokeGain.value = 0.7;
+  uniforms.uOverlayStrength.value = 1.1;
+  uniforms.uOverlayGain.value = 1.4;
+
+  render(shader, null);
+}
+
 // 実行開始
 frame(performance.now());
 
@@ -232,7 +368,7 @@ function frame(time: number) {
   const deltaT = (time - previousTime) / 1000;
   const nowSec = time * 0.001;
 
-  // マウス押下/解放の遷移検出を先に行う（座標リセット前に処理）
+  // 押下/解放遷移検出
   if (pointerManager.isPointerDown && !wasPointerDown) {
     // ダウン: 現在値から1.0へ0.3s
     radiusAnimStart = radiusAnimCurrent;
@@ -245,208 +381,27 @@ function frame(time: number) {
     radiusAnimEnd = 0.0;
     radiusAnimStartTimeSec = nowSec;
     radiusAnimDuration = radiusDecayDuration;
-    // 解放直前の有効なフィルタ座標をラッチ
-    lastInjectPointer.copy(lastActiveFilteredPointer);
-  }
-
-  // マウス座標のスプリング更新（バネ-ダンパ 2次系, 参考実装形式）
-  if (pointerManager.isPointerDown) {
-    if (!isPointerFilterActive) {
-      springTarget.copy(pointerManager.pointer);
-      filteredPointer.copy(springTarget);
-      prevFilteredPointer.copy(filteredPointer);
-      filteredVelocity.set(0, 0);
-      isPointerFilterActive = true;
-    }
-    // 押下中はターゲットを更新
-    springTarget.copy(pointerManager.pointer);
-  }
-
-  // 押下かどうかに関わらず、アクティブならスプリングを更新
-  if (isPointerFilterActive) {
-    const k = simulationConfig.pointerSpringK;
-    const c = simulationConfig.pointerSpringC;
-    const visual = simulationConfig.pointerSpringVisualGain;
-    const dt = Math.min(Math.max(deltaT, 0.0), 0.032);
-
-    const diff = springTarget.clone().sub(filteredPointer);
-    const ax = k * diff.x - c * filteredVelocity.x;
-    const ay = k * diff.y - c * filteredVelocity.y;
-
-    filteredVelocity.x += ax * dt;
-    filteredVelocity.y += ay * dt;
-    filteredPointer.x += filteredVelocity.x * dt * visual;
-    filteredPointer.y += filteredVelocity.y * dt * visual;
-
-    // 近傍スナップ（微小振動を即収束）
-    if (
-      diff.lengthSq() < 0.5 * 0.5 &&
-      filteredVelocity.lengthSq() < 0.5 * 0.5
-    ) {
-      filteredPointer.copy(springTarget);
-      filteredVelocity.set(0, 0);
-    }
-
-    // アップ後の終端条件: 半径がほぼ0かつ速度ほぼ0なら停止
-    if (
-      !pointerManager.isPointerDown &&
-      radiusAnimCurrent <= 0.001 &&
-      filteredVelocity.lengthSq() < 0.0001
-    ) {
-      isPointerFilterActive = false;
-      filteredPointer.set(-1, -1);
-      prevFilteredPointer.set(-1, -1);
-      filteredVelocity.set(0, 0);
-    }
-  }
-
-  // 半径アニメーション更新（easeOutCubic）
-  if (radiusAnimDuration > 0.0) {
-    const tRaw = Math.min(
-      Math.max((nowSec - radiusAnimStartTimeSec) / radiusAnimDuration, 0.0),
-      1.0,
-    );
-    const t = 1.0 - Math.pow(1.0 - tRaw, 3.0);
-    radiusAnimCurrent = radiusAnimStart + (radiusAnimEnd - radiusAnimStart) * t;
-  }
-
-  // アクティブな間は中心を更新（アップ後もスプリング減衰を反映）
-  if (isPointerFilterActive) {
+    // 解放直前の座標をラッチ
     lastInjectPointer.copy(filteredPointer);
   }
+  updateSpring(deltaT);
+  updateRadius(nowSec);
 
-  // 押下中の有効フィルタ座標を保存（アップ時にラッチ使用）
-  if (isPointerFilterActive) {
-    lastActiveFilteredPointer.copy(filteredPointer);
-  }
-
-  if (isPointerFilterActive) {
-    // 外力の注入
-    const shader = addForceShader;
-    const uniforms = shader.uniforms;
-
-    // ダンピング後の移動距離から速度の変化を計算
-    const deltaV = filteredPointer
-      .clone()
-      .sub(prevFilteredPointer)
-      .multiply(texelSize)
-      .multiplyScalar(simulationConfig.forceCoefficient)
-      .multiplyScalar(window.devicePixelRatio);
-    uniforms.uData.value = dataTexture.texture;
-    uniforms.uForceCenter.value.copy(
-      filteredPointer.clone().multiply(texelSize),
-    );
-    uniforms.uForceDeltaV.value.copy(deltaV);
-    uniforms.uForceRadius.value =
-      simulationConfig.forceRadius * Math.max(radiusAnimCurrent, 0.0);
-
-    render(shader, dataRenderTarget);
-    swapTexture();
-  }
+  applyExternalForce();
 
   // タイムスケールに合わせてシミュレーションステップを実行
-  const stepCount = Math.min(Math.max(Math.floor(deltaT * 240), 1), 8);
-  for (let i = 0; i < stepCount; i++) {
-    const simulationDeltaT = deltaT / stepCount;
-    {
-      // 速度の移流
-      const shader = advectVelShader;
-      const uniforms = shader.uniforms;
-
-      uniforms.uData.value = dataTexture.texture;
-      uniforms.uDeltaT.value = simulationDeltaT;
-      uniforms.uDissipation.value = simulationConfig.dissipation;
-      render(shader, dataRenderTarget);
-      swapTexture();
-    }
-
-    {
-      // 発散の計算
-      const shader = divergenceShader;
-      const uniforms = shader.uniforms;
-
-      uniforms.uData.value = dataTexture.texture;
-      render(shader, dataRenderTarget);
-      swapTexture();
-    }
-
-    for (let i = 0; i < simulationConfig.solverIteration; i++) {
-      // 圧力の計算
-      const shader = pressureShader;
-      const uniforms = shader.uniforms;
-
-      uniforms.uData.value = dataTexture.texture;
-      render(shader, dataRenderTarget);
-      swapTexture();
-    }
-
-    {
-      // 圧力勾配の減算
-      const shader = subtractGradientShader;
-      const uniforms = shader.uniforms;
-
-      uniforms.uData.value = dataTexture.texture;
-      render(shader, dataRenderTarget);
-      swapTexture();
-    }
-  }
+  simulate(deltaT);
 
   // 押下中 もしくは 半径が減衰中はインク注入を継続
   if (pointerManager.isPointerDown || radiusAnimCurrent > 0.001) {
-    // インクの注入
-    const shader = injectDyeShader;
-    const uniforms = shader.uniforms;
-
-    uniforms.uImage.value = imageTexture.texture;
-    const injectCenter = (
-      isPointerFilterActive ? filteredPointer : lastInjectPointer
-    )
-      .clone()
-      .multiply(texelSize);
-    uniforms.uForceCenter.value.copy(injectCenter);
-    uniforms.uForceRadius.value =
-      simulationConfig.forceRadius *
-      window.devicePixelRatio *
-      Math.max(radiusAnimCurrent, 0.0);
-    uniforms.uInjectGain.value = 50;
-
-    render(shader, imageRenderTarget);
-    [imageTexture, imageRenderTarget] = [imageRenderTarget, imageTexture];
+    injectDye();
   }
 
-  {
-    // インクの移流
-    const shader = advectImageShader;
-    const uniforms = shader.uniforms;
+  // インクの移流
+  advectDye(deltaT);
 
-    uniforms.uImage.value = imageTexture.texture;
-    uniforms.uData.value = dataTexture.texture;
-    uniforms.uDeltaT.value = deltaT;
-    uniforms.uDyeAdvectScale.value = 10;
-    uniforms.uHalfLife.value = 0.15;
-
-    render(shader, imageRenderTarget);
-    [imageTexture, imageRenderTarget] = [imageRenderTarget, imageTexture];
-  }
-
-  {
-    // 描画
-    const shader = renderShader;
-    const uniforms = shader.uniforms;
-
-    uniforms.uDye.value = imageTexture.texture;
-    uniforms.uRefractAmp.value = 1.6; // 歪みの強さ
-    // マルチスケール屈折の半径と減衰
-    uniforms.uRefractRadius.value = 2.0; // 範囲を広げる
-    uniforms.uRefractFalloff.value = 0.6; // 大半径の寄与も残す
-    uniforms.uDensityK.value = 0.5; // 吸収を弱めて薄さを改善
-    uniforms.uSmokeGain.value = 0.7; // 白の寄与を少し戻す
-    // 加算合成の強さ（以前のオーバーレイ用のユニフォームを流用）
-    uniforms.uOverlayStrength.value = 1.1; // 加算を強める
-    uniforms.uOverlayGain.value = 1.4;
-
-    render(shader, null);
-  }
+  // 合成
+  compose();
 
   // 次のフレームに備えて後処理
   pointerManager.updatePreviousPointer();
@@ -458,18 +413,14 @@ function frame(time: number) {
   requestAnimationFrame(frame);
 }
 
-/**
- * レンダーターゲットに書かれた内容をリセットする
- */
+/**  レンダーターゲットに書かれた内容をリセット */
 function clearRenderTarget(renderTarget: THREE.RenderTarget) {
   renderer.setRenderTarget(renderTarget);
   renderer.clearColor();
   renderer.setRenderTarget(null);
 }
 
-/**
- * 指定したNodeMaterialで指定したターゲット（テクスチャーかフレームバッファー）にレンダリングする
- */
+/** 指定したNodeMaterialで指定したターゲット（テクスチャーかフレームバッファー）にレンダリング */
 function render(material: NodeMaterial, target: THREE.RenderTarget | null) {
   quad.material = material;
   renderer.setRenderTarget(target);
@@ -483,15 +434,4 @@ function render(material: NodeMaterial, target: THREE.RenderTarget | null) {
  */
 function swapTexture() {
   [dataTexture, dataRenderTarget] = [dataRenderTarget, dataTexture];
-}
-
-/**
- * デバッグ表示
- * TSLを実行する3D APIのシェーダー言語に翻訳したものをコンソール出力して確認する
- */
-async function debugShader(material: NodeMaterial) {
-  quad.material = material;
-  const rawShader = await renderer.debug.getShaderAsync(scene, camera, quad);
-  console.log(rawShader.vertexShader);
-  console.log(rawShader.fragmentShader);
 }
