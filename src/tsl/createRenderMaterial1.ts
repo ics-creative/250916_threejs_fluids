@@ -62,8 +62,8 @@ export const createRenderMaterial1 = () => {
   const cC = uDye.sample(uv).r;
   // 半径スケール
   const r1 = uRefractRadius;
-  const r2 = uRefractRadius.mul(2.0);
-  const r3 = uRefractRadius.mul(3.0);
+  const r2 = uRefractRadius.mul(5.0);
+  const r3 = uRefractRadius.mul(10.0);
 
   // 1x 半径
   const cL1 = uDye.sample(uv.sub(vec2(uDyeTexel.x.mul(r1), 0.0))).r;

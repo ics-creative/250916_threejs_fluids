@@ -67,6 +67,17 @@ let prevFilteredPointer = new THREE.Vector2(-1, -1);
 let isPointerFilterActive = false;
 let springTarget = new THREE.Vector2(-1, -1);
 let filteredVelocity = new THREE.Vector2(0, 0);
+// 半径アニメーション用の状態
+const radiusGrowDuration = 0.3; // 拡大 0.3s
+const radiusDecayDuration = 1.0; // 縮小 1.0s
+let radiusAnimCurrent = 0.0;
+let radiusAnimStart = 0.0;
+let radiusAnimEnd = 0.0;
+let radiusAnimStartTimeSec = 0.0;
+let radiusAnimDuration = 0.0;
+let wasPointerDown = false;
+let lastInjectPointer = new THREE.Vector2(-1, -1);
+let lastActiveFilteredPointer = new THREE.Vector2(-1, -1);
 
 // Three.jsのレンダリングに必要な一式
 let renderer: WebGPURenderer;
@@ -266,9 +277,26 @@ function onWindowResize() {
  */
 function frame(time: number) {
   const deltaT = (time - previousTime) / 1000;
+  const nowSec = time * 0.001;
+
+  // マウス押下/解放の遷移検出を先に行う（座標リセット前に処理）
+  if (pointerManager.isPointerDown && !wasPointerDown) {
+    // ダウン: 現在値から1.0へ0.3s
+    radiusAnimStart = radiusAnimCurrent;
+    radiusAnimEnd = 1.0;
+    radiusAnimStartTimeSec = nowSec;
+    radiusAnimDuration = radiusGrowDuration;
+  } else if (!pointerManager.isPointerDown && wasPointerDown) {
+    // アップ: 現在値から0.0へ1.0s
+    radiusAnimStart = radiusAnimCurrent;
+    radiusAnimEnd = 0.0;
+    radiusAnimStartTimeSec = nowSec;
+    radiusAnimDuration = radiusDecayDuration;
+    // 解放直前の有効なフィルタ座標をラッチ
+    lastInjectPointer.copy(lastActiveFilteredPointer);
+  }
 
   // マウス座標のスプリング更新（バネ-ダンパ 2次系, 参考実装形式）
-  // スプリングはマウスダウン中のみ動作（アップでリセット）
   if (pointerManager.isPointerDown) {
     if (!isPointerFilterActive) {
       springTarget.copy(pointerManager.pointer);
@@ -276,33 +304,64 @@ function frame(time: number) {
       prevFilteredPointer.copy(filteredPointer);
       filteredVelocity.set(0, 0);
       isPointerFilterActive = true;
-    } else {
-      springTarget.copy(pointerManager.pointer);
-      const k = simulationConfig.pointerSpringK;
-      const c = simulationConfig.pointerSpringC;
-      const visual = simulationConfig.pointerSpringVisualGain;
-      const dt = Math.min(Math.max(deltaT, 0.0), 0.032);
-
-      const diff = springTarget.clone().sub(filteredPointer);
-      const ax = k * diff.x - c * filteredVelocity.x;
-      const ay = k * diff.y - c * filteredVelocity.y;
-
-      filteredVelocity.x += ax * dt;
-      filteredVelocity.y += ay * dt;
-      filteredPointer.x += filteredVelocity.x * dt * visual;
-      filteredPointer.y += filteredVelocity.y * dt * visual;
-
-      // 近傍スナップ（微小振動を即収束）
-      if (diff.lengthSq() < 0.5 * 0.5 && filteredVelocity.lengthSq() < 0.5 * 0.5) {
-        filteredPointer.copy(springTarget);
-        filteredVelocity.set(0, 0);
-      }
     }
-  } else {
-    isPointerFilterActive = false;
-    filteredPointer.set(-1, -1);
-    prevFilteredPointer.set(-1, -1);
-    filteredVelocity.set(0, 0);
+    // 押下中はターゲットを更新
+    springTarget.copy(pointerManager.pointer);
+  }
+
+  // 押下かどうかに関わらず、アクティブならスプリングを更新
+  if (isPointerFilterActive) {
+    const k = simulationConfig.pointerSpringK;
+    const c = simulationConfig.pointerSpringC;
+    const visual = simulationConfig.pointerSpringVisualGain;
+    const dt = Math.min(Math.max(deltaT, 0.0), 0.032);
+
+    const diff = springTarget.clone().sub(filteredPointer);
+    const ax = k * diff.x - c * filteredVelocity.x;
+    const ay = k * diff.y - c * filteredVelocity.y;
+
+    filteredVelocity.x += ax * dt;
+    filteredVelocity.y += ay * dt;
+    filteredPointer.x += filteredVelocity.x * dt * visual;
+    filteredPointer.y += filteredVelocity.y * dt * visual;
+
+    // 近傍スナップ（微小振動を即収束）
+    if (diff.lengthSq() < 0.5 * 0.5 && filteredVelocity.lengthSq() < 0.5 * 0.5) {
+      filteredPointer.copy(springTarget);
+      filteredVelocity.set(0, 0);
+    }
+
+    // アップ後の終端条件: 半径がほぼ0かつ速度ほぼ0なら停止
+    if (
+      !pointerManager.isPointerDown &&
+      radiusAnimCurrent <= 0.001 &&
+      filteredVelocity.lengthSq() < 0.0001
+    ) {
+      isPointerFilterActive = false;
+      filteredPointer.set(-1, -1);
+      prevFilteredPointer.set(-1, -1);
+      filteredVelocity.set(0, 0);
+    }
+  }
+
+  // 半径アニメーション更新（easeOutCubic）
+  if (radiusAnimDuration > 0.0) {
+    const tRaw = Math.min(
+      Math.max((nowSec - radiusAnimStartTimeSec) / radiusAnimDuration, 0.0),
+      1.0,
+    );
+    const t = 1.0 - Math.pow(1.0 - tRaw, 3.0);
+    radiusAnimCurrent = radiusAnimStart + (radiusAnimEnd - radiusAnimStart) * t;
+  }
+
+  // アクティブな間は中心を更新（アップ後もスプリング減衰を反映）
+  if (isPointerFilterActive) {
+    lastInjectPointer.copy(filteredPointer);
+  }
+
+  // 押下中の有効フィルタ座標を保存（アップ時にラッチ使用）
+  if (isPointerFilterActive) {
+    lastActiveFilteredPointer.copy(filteredPointer);
   }
 
   if (isPointerFilterActive) {
@@ -322,7 +381,8 @@ function frame(time: number) {
       filteredPointer.clone().multiply(texelSize),
     );
     uniforms.uForceDeltaV.value.copy(deltaV);
-    uniforms.uForceRadius.value = simulationConfig.forceRadius;
+    uniforms.uForceRadius.value =
+      simulationConfig.forceRadius * Math.max(radiusAnimCurrent, 0.0);
 
     render(shader, dataRenderTarget);
     swapTexture();
@@ -375,17 +435,20 @@ function frame(time: number) {
     }
   }
 
-  if (isPointerFilterActive) {
+  // 押下中 もしくは 半径が減衰中はインク注入を継続
+  if (pointerManager.isPointerDown || radiusAnimCurrent > 0.001) {
     // インクの注入
     const shader = injectDyeShader;
     const uniforms = shader.uniforms;
 
     uniforms.uImage.value = imageTexture.texture;
-    uniforms.uForceCenter.value.copy(
-      filteredPointer.clone().multiply(texelSize),
-    );
+    const injectCenter = (isPointerFilterActive ? filteredPointer : lastInjectPointer)
+      .clone()
+      .multiply(texelSize);
+    uniforms.uForceCenter.value.copy(injectCenter);
     uniforms.uForceRadius.value =
-      simulationConfig.forceRadius * window.devicePixelRatio;
+      simulationConfig.forceRadius * window.devicePixelRatio *
+      Math.max(radiusAnimCurrent, 0.0);
     uniforms.uInjectGain.value = 50;
 
     render(shader, imageRenderTarget);
@@ -432,6 +495,7 @@ function frame(time: number) {
     prevFilteredPointer.copy(filteredPointer);
   }
   previousTime = time;
+  wasPointerDown = pointerManager.isPointerDown;
   requestAnimationFrame(frame);
 }
 
