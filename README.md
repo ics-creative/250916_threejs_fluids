@@ -1,6 +1,6 @@
-# 250912_threejs_fluids
+# 250916_threejs_fluids
 
-ICS MEDIA「[誰でも使える！ Three.jsでウェブサイトに2D流体表現を追加しよう](https://ics.media/entry/250912/)」のサンプルコードです。
+ICS MEDIA「[Three.js(WebGPU)で実現するStable Fluids - 2Dの流体シミュレーション](https://ics.media/entry/250916/)」のサンプルコードです。
 
 ## デモ
 

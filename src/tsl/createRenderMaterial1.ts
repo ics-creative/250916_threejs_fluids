@@ -67,7 +67,7 @@ export const createRenderMaterial1 = () => {
 
   // 透過
   const transparent = exp(uDensityK.mul(cC).mul(-1.0));
-  const smoke = vec3(0.8).mul(uSmokeGain.mul(vec3(1.0).sub(transparent)));
+  const smoke = vec3(1.0).mul(uSmokeGain.mul(vec3(1.0).sub(transparent)));
 
   // 合成
   const outCol = bg.mul(transparent).add(smoke);

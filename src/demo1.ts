@@ -43,14 +43,14 @@ const simulationConfig = {
   // マウスを外力として使用する際に影響を与える半径サイズ
   forceRadius: 50,
   // マウスを外力として使用する際のちからの係数
-  forceCoefficient: 500,
+  forceCoefficient: 1000,
   /**
    * 移流時の減衰
    * 1.0に近づけることで高粘度な流体のような見た目にできる
    * 1以上にはしない
    * あくまで粘度っぽさであり、粘性項とは無関係
    */
-  dissipation: 0.995,
+  dissipation: 0.998,
 };
 
 // 時間差分計算用の一時変数
@@ -267,7 +267,8 @@ function frame(time: number) {
       .clone()
       .sub(pointerManager.prevPointer)
       .multiply(texelSize)
-      .multiplyScalar(simulationConfig.forceCoefficient);
+      .multiplyScalar(simulationConfig.forceCoefficient)
+      .multiplyScalar(window.devicePixelRatio);
     uniforms.uData.value = dataTexture.texture;
     uniforms.uForceCenter.value.copy(
       pointerManager.pointer.clone().multiply(texelSize),
@@ -335,7 +336,8 @@ function frame(time: number) {
     uniforms.uForceCenter.value.copy(
       pointerManager.pointer.clone().multiply(texelSize),
     );
-    uniforms.uForceRadius.value = simulationConfig.forceRadius;
+    uniforms.uForceRadius.value =
+      simulationConfig.forceRadius * window.devicePixelRatio;
     uniforms.uInjectGain.value = 50;
 
     render(shader, imageRenderTarget);
@@ -363,9 +365,9 @@ function frame(time: number) {
     const uniforms = shader.uniforms;
 
     uniforms.uDye.value = imageTexture.texture;
-    uniforms.uRefractAmp.value = 0.9;
-    uniforms.uDensityK.value = 0.9;
-    uniforms.uSmokeGain.value = 0.8;
+    uniforms.uRefractAmp.value = 0.8;
+    uniforms.uDensityK.value = 0.2;
+    uniforms.uSmokeGain.value = 0.9;
 
     render(shader, null);
   }
