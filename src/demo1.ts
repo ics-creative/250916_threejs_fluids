@@ -41,7 +41,7 @@ const simulationConfig = {
   // 1回のシミュレーションステップで行うヤコビ法の圧力計算の回数。大きいほど安定して正確性が増すが、負荷が高くなる
   solverIteration: 5,
   // マウスを外力として使用する際に影響を与える半径サイズ
-  forceRadius: 35,
+  forceRadius: 50,
   // マウスを外力として使用する際のちからの係数
   forceCoefficient: 500,
   /**
@@ -336,7 +336,7 @@ function frame(time: number) {
       pointerManager.pointer.clone().multiply(texelSize),
     );
     uniforms.uForceRadius.value = simulationConfig.forceRadius;
-    uniforms.uInjectGain.value = 30;
+    uniforms.uInjectGain.value = 50;
 
     render(shader, imageRenderTarget);
     [imageTexture, imageRenderTarget] = [imageRenderTarget, imageTexture];
