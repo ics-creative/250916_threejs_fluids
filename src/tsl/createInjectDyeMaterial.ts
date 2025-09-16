@@ -8,6 +8,7 @@ import {
   uniform,
   uniformTexture,
   vec2,
+  vec3,
   vec4,
 } from "three/tsl";
 import { NodeMaterial } from "three/webgpu";
@@ -25,7 +26,6 @@ export const createInjectDyeMaterial = () => {
   const uTextureSize = uniform(new THREE.Vector2());
   const uForceCenter = uniform(new THREE.Vector2());
   const uForceRadius = uniform(0.0);
-  const uDyeColor = uniform(new THREE.Vector3());
   const uInjectGain = uniform(0.0);
 
   //========== TSLここから
@@ -37,7 +37,11 @@ export const createInjectDyeMaterial = () => {
     .div(max(vec2(uForceRadius).mul(uTextureSize), vec2(1e-6)));
 
   const dye = clamp(
-    base.add(uDyeColor.mul(uInjectGain).mul(exp(dot(nd, nd).mul(-1.0)))),
+    base.add(
+      vec3(1.0)
+        .mul(uInjectGain)
+        .mul(exp(dot(nd, nd).mul(-1.0))),
+    ),
     0.0,
     1.0,
   );
@@ -55,7 +59,6 @@ export const createInjectDyeMaterial = () => {
     uTextureSize,
     uForceCenter,
     uForceRadius,
-    uDyeColor,
     uInjectGain,
   });
 };

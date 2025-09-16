@@ -41,16 +41,16 @@ const simulationConfig = {
   // 1回のシミュレーションステップで行うヤコビ法の圧力計算の回数。大きいほど安定して正確性が増すが、負荷が高くなる
   solverIteration: 5,
   // マウスを外力として使用する際に影響を与える半径サイズ
-  forceRadius: 20,
+  forceRadius: 35,
   // マウスを外力として使用する際のちからの係数
-  forceCoefficient: 1000,
+  forceCoefficient: 500,
   /**
    * 移流時の減衰
    * 1.0に近づけることで高粘度な流体のような見た目にできる
    * 1以上にはしない
    * あくまで粘度っぽさであり、粘性項とは無関係
    */
-  dissipation: 0.996,
+  dissipation: 0.995,
 };
 
 // 時間差分計算用の一時変数
@@ -336,8 +336,7 @@ function frame(time: number) {
       pointerManager.pointer.clone().multiply(texelSize),
     );
     uniforms.uForceRadius.value = simulationConfig.forceRadius;
-    uniforms.uDyeColor.value.set(0.2, 0.2, 0.2);
-    uniforms.uInjectGain.value = 10;
+    uniforms.uInjectGain.value = 30;
 
     render(shader, imageRenderTarget);
     [imageTexture, imageRenderTarget] = [imageRenderTarget, imageTexture];
@@ -351,7 +350,7 @@ function frame(time: number) {
     uniforms.uImage.value = imageTexture.texture;
     uniforms.uData.value = dataTexture.texture;
     uniforms.uDeltaT.value = deltaT;
-    uniforms.uDyeAdvectScale.value = 10;
+    uniforms.uDyeAdvectScale.value = 15;
     uniforms.uHalfLife.value = 0.3;
 
     render(shader, imageRenderTarget);
@@ -367,7 +366,6 @@ function frame(time: number) {
     uniforms.uRefractAmp.value = 0.9;
     uniforms.uDensityK.value = 0.9;
     uniforms.uSmokeGain.value = 0.8;
-    uniforms.uTimeStep.value = time * 0.0001;
 
     render(shader, null);
   }

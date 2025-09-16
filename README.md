@@ -25,7 +25,7 @@ ICS MEDIA「[誰でも使える！ Three.jsでウェブサイトに2D流体表�
 
 ### レンダリング
 
-- [createRenderMaterial1](https://github.com/ics-creative/250916_threejs_fluids/blob/main/src/tsl/createRenderMaterial2.ts#L30)
+- [createRenderMaterial2](https://github.com/ics-creative/250916_threejs_fluids/blob/main/src/tsl/createRenderMaterial2.ts#L30)
 
 得られた速度場を使って流体の見た目をレンダリングする部分を変更します。サンプルコードでは速度場を色で可視化（デモ2）したり、速度場にしたがって背景画像をワープ（デモ3）や移流（デモ4）させています。
 

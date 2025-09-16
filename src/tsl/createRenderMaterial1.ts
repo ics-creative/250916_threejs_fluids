@@ -13,7 +13,6 @@ import {
 import { NodeMaterial } from "three/webgpu";
 import { createClipSpaceVertexNode } from "./chunk/createClipSpaceVertexNode.ts";
 import { assignUniforms } from "./assifnUniforms.ts";
-import { hsv2rgb } from "./chunk/hsv2rgb.ts";
 
 export type RenderNodeMaterial1 = ReturnType<typeof createRenderMaterial1>;
 
@@ -33,7 +32,6 @@ export const createRenderMaterial1 = () => {
   const uRefractAmp = uniform(0.0);
   const uDensityK = uniform(0.0);
   const uSmokeGain = uniform(0.0);
-  const uTimeStep = uniform(0.0);
 
   //========== TSLここから
   // const uvS = vec2(screenCoordinate.xy).mul(uScreenTexel);
@@ -73,9 +71,7 @@ export const createRenderMaterial1 = () => {
 
   // 透過
   const transparent = exp(uDensityK.mul(cC).mul(-1.0));
-  const smoke = hsv2rgb(uTimeStep, 0.5, 1.0).mul(
-    uSmokeGain.mul(vec3(1.0).sub(transparent)),
-  );
+  const smoke = vec3(0.8).mul(uSmokeGain.mul(vec3(1.0).sub(transparent)));
 
   // 合成
   const outCol = bg.mul(transparent).add(smoke);
@@ -98,6 +94,5 @@ export const createRenderMaterial1 = () => {
     uRefractAmp,
     uDensityK,
     uSmokeGain,
-    uTimeStep,
   });
 };
