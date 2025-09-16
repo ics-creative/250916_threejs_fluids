@@ -24,11 +24,6 @@ import {
   createSubtractGradientMaterial,
   type SubtractGradientNodeMaterial,
 } from "./tsl/createSubtractGradientMaterial.ts";
-import {
-  type AdvectDyeNodeMaterial,
-  createAdvectDyeMaterial,
-} from "./tsl/createAdvectDyeMaterial.ts";
-import { createBlitImageMaterial } from "./tsl/createBlitImageMaterial.ts";
 import { PointerManager } from "./PointerManager.ts";
 
 // シミュレーション用のパラメーター
@@ -77,17 +72,12 @@ let dataRenderTarget: THREE.RenderTarget;
 // 背景画像に使用するテクスチャー
 let sourceImageTexture: THREE.Texture;
 
-// 背景画像の更新結果を格納するテクスチャー
-let imageTexture: THREE.RenderTarget;
-let imageRenderTarget: THREE.RenderTarget;
-
 // シミュレーション及び描画に使用するTSLシェーダーを設定したマテリアル
 let addForceShader: AddForceNodeMaterial;
 let advectVelShader: AdvectVelocityNodeMaterial;
 let divergenceShader: DivergenceNodeMaterial;
 let pressureShader: PressureJacobiNodeMaterial;
 let subtractGradientShader: SubtractGradientNodeMaterial;
-let advectImageShader: AdvectDyeNodeMaterial;
 let renderShader: RenderNodeMaterial3;
 
 // 初期化
@@ -143,28 +133,6 @@ async function init() {
   clearRenderTarget(dataTexture);
   clearRenderTarget(dataRenderTarget);
 
-  // 背景の更新を書き込むテクスチャーをPing-Pong用に2つ作成。
-  const imageRtOptions = {
-    wrapS: THREE.ClampToEdgeWrapping,
-    wrapT: THREE.ClampToEdgeWrapping,
-    minFilter: THREE.LinearFilter,
-    magFilter: THREE.LinearFilter,
-    format: THREE.RGBAFormat,
-    type: THREE.HalfFloatType,
-    depthBuffer: false,
-    stencilBuffer: false,
-  };
-  imageTexture = new THREE.RenderTarget(
-    window.innerWidth,
-    window.innerHeight,
-    imageRtOptions,
-  );
-  imageRenderTarget = new THREE.RenderTarget(
-    window.innerWidth,
-    window.innerHeight,
-    imageRtOptions,
-  );
-
   // シミュレーションで使用するシェーダーを作成
   addForceShader = createAddForceMaterial();
   advectVelShader = createAdvectVelocityMaterial();
@@ -173,7 +141,6 @@ async function init() {
   subtractGradientShader = createSubtractGradientMaterial();
 
   // 描画に使用するシェーダーを作成
-  advectImageShader = createAdvectDyeMaterial();
   renderShader = createRenderMaterial3();
 
   // 確認のためレンダリング用のシェーダーをデバッグ表示
@@ -203,17 +170,17 @@ async function init() {
  * シミュレーション用のデータテクスチャーを画面サイズに応じてリサイズする
  */
 function onWindowResize() {
+  // リサイズ時のお約束処理
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
 
+  // シミュレーション用のデータテクスチャーを画面サイズに応じてリサイズする
   const newWidth = window.innerWidth * window.devicePixelRatio;
   const newHeight = window.innerHeight * window.devicePixelRatio;
   dataWidth = Math.round(newWidth * simulationConfig.pixelRatio);
   dataHeight = Math.round(newHeight * simulationConfig.pixelRatio);
   dataTexture.setSize(dataWidth, dataHeight);
   dataRenderTarget.setSize(dataWidth, dataHeight);
-  imageTexture.setSize(newWidth, newHeight);
-  imageRenderTarget.setSize(newWidth, newHeight);
   // WebGPU座標系の場合はポインタのY座標を反転する
   pointerManager.resizeTarget(
     simulationConfig.pixelRatio,
@@ -229,15 +196,8 @@ function onWindowResize() {
   divergenceShader.uniforms.uTexelSize.value.copy(texelSize);
   pressureShader.uniforms.uTexelSize.value.copy(texelSize);
   subtractGradientShader.uniforms.uTexelSize.value.copy(texelSize);
-  advectImageShader.uniforms.uTexelSize.value.copy(texelSize);
-  advectImageShader.uniforms.uTextureSize.value.set(
-    1 / newWidth,
-    1 / newHeight,
-  );
+  renderShader.uniforms.uTexelSize.value.copy(texelSize);
   renderShader.uniforms.uTextureSize.value.set(1 / newWidth, 1 / newHeight);
-
-  // 画面サイズに応じて背景用テクスチャーを再転送
-  blitImage();
 
   // 背景用テクスチャーをセンタリングするためのパラメーターをシェーダー定数に設定
   if (renderShader.uniforms.uImage.value.source?.data) {
@@ -250,32 +210,6 @@ function onWindowResize() {
       ),
     );
   }
-}
-
-/**
- * 背景用テクスチャーを画面サイズに応じたテクスチャーに転送する
- */
-function blitImage() {
-  // 初期化
-  const shader = createBlitImageMaterial(
-    renderer.backend.coordinateSystem === THREE.WebGPUCoordinateSystem,
-  );
-  const uniforms = shader.uniforms;
-
-  uniforms.uImage.value = sourceImageTexture;
-  uniforms.uTextureSize.value.set(
-    1 / imageRenderTarget.width,
-    1 / imageRenderTarget.height,
-  );
-  uniforms.uImageScale.value.copy(
-    getImageScale(
-      imageRenderTarget.width,
-      imageRenderTarget.height,
-      sourceImageTexture.width,
-      sourceImageTexture.height,
-    ),
-  );
-  render(shader, imageTexture);
 }
 
 /**
@@ -325,8 +259,8 @@ function frame(time: number) {
 
   // タイムスケールに合わせてシミュレーションステップを実行
   const stepCount = Math.min(Math.max(Math.floor(deltaT * 240), 1), 8);
+  const simulationDeltaT = deltaT / stepCount;
   for (let i = 0; i < stepCount; i++) {
-    const simulationDeltaT = deltaT / stepCount;
     {
       // 速度の移流
       const shader = advectVelShader;
@@ -368,18 +302,6 @@ function frame(time: number) {
       render(shader, dataRenderTarget);
       swapTexture();
     }
-
-    {
-      // ピクセルの移流
-      const shader = advectImageShader;
-      const uniforms = shader.uniforms;
-
-      uniforms.uImage.value = imageTexture.texture;
-      uniforms.uData.value = dataTexture.texture;
-      uniforms.uDeltaT.value = simulationDeltaT;
-      render(shader, imageRenderTarget);
-      [imageTexture, imageRenderTarget] = [imageRenderTarget, imageTexture];
-    }
   }
 
   {
@@ -387,7 +309,8 @@ function frame(time: number) {
     const shader = renderShader;
     const uniforms = shader.uniforms;
 
-    uniforms.uImage.value = imageTexture.texture;
+    uniforms.uTexture.value = dataTexture.texture;
+    renderShader.uniforms.uImage.value = sourceImageTexture;
     render(shader, null);
   }
 

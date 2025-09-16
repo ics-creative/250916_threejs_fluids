@@ -1,31 +1,31 @@
 import * as THREE from "three";
 import {
+  atan,
+  clamp,
+  fract,
   screenCoordinate,
-  select,
   uniform,
   uniformTexture,
   vec2,
-  vec3,
   vec4,
+  length,
 } from "three/tsl";
 import { NodeMaterial } from "three/webgpu";
 import { createClipSpaceVertexNode } from "./chunk/createClipSpaceVertexNode.ts";
 import { assignUniforms } from "./assifnUniforms.ts";
-import { mirrorRepeatUV } from "./chunk/mirrorRepeatUV.ts";
+import { hsv2rgb } from "./chunk/hsv2rgb.ts";
 
 export type RenderNodeMaterial2 = ReturnType<typeof createRenderMaterial2>;
 
 /**
  * デモ2でシミューレーション結果に従ってレンダリングを行うシェーダー
- * 入力テクスチャーを速度場に従って歪ませる
+ * 速度場を可視化する
  */
 export const createRenderMaterial2 = () => {
   // uniforms定義
   const uTexture = uniformTexture(new THREE.Texture());
-  const uImage = uniformTexture(new THREE.Texture());
-  const uTexelSize = uniform(new THREE.Vector2());
   const uTextureSize = uniform(new THREE.Vector2());
-  const uImageScale = uniform(new THREE.Vector2(1, 1));
+  const uTimeStep = uniform(1.0);
 
   //========== TSLここから
   const uv0 = vec2(screenCoordinate.xy).mul(uTextureSize);
@@ -35,24 +35,15 @@ export const createRenderMaterial2 = () => {
 
   // data.xyに速度、data.zに圧力、data.wに発散が入っているので、これられの物理量をベースに見た目を作る
 
-  const uvScaled = uv.sub(0.5).mul(uImageScale).add(0.5);
+  // 速度の向きをhueに対応させる。360度の向きを0度から60度にマッピングし、切れ目で汚くならないよう折り返す。ベースは時間変化
+  const hueBase = fract(atan(data.y, data.x).mul(1 / (Math.PI * 2.0)));
+  const tri = hueBase.mul(2.0).sub(1.0).abs().mul(-1.0).add(1.0);
+  const hue = tri.mul(1.0 / 6.0).add(uTimeStep);
 
-  const inX = uvScaled.x
-    .greaterThanEqual(0.0)
-    .and(uvScaled.x.lessThanEqual(1.0));
-  const inY = uvScaled.y
-    .greaterThanEqual(0.0)
-    .and(uvScaled.y.lessThanEqual(1.0));
-  const inBounds = inX.and(inY);
-
-  const dUV = vec2(1.2).mul(data.xy).mul(uTexelSize);
-  const uvB = mirrorRepeatUV(uvScaled.sub(dUV), uTextureSize);
-  const col = uImage.sample(uvB).rgb;
-
-  const colorIn = vec4(col.add(vec3(data.z.mul(0.01))), 1.0);
-  const colorOut = vec4(0.0, 0.0, 0.0, 1.0);
-
-  const fragColor = select(inBounds, colorIn, colorOut);
+  // 速度の絶対値をsaturationのベースにする
+  const speed = length(data.xy);
+  const sat = clamp(speed.mul(40.0), 0.3, 0.9);
+  const fragColor = vec4(hsv2rgb(hue, sat, 0.9), 1.0);
   //========== TSLここまで
 
   // マテリアル作成
@@ -62,9 +53,7 @@ export const createRenderMaterial2 = () => {
 
   return assignUniforms(material, {
     uTexture,
-    uImage,
-    uTexelSize,
     uTextureSize,
-    uImageScale,
+    uTimeStep,
   });
 };

@@ -1,18 +1,29 @@
 import * as THREE from "three";
-import { screenCoordinate, uniform, uniformTexture, vec2 } from "three/tsl";
+import {
+  screenCoordinate,
+  select,
+  uniform,
+  uniformTexture,
+  vec2,
+  vec3,
+  vec4,
+} from "three/tsl";
 import { NodeMaterial } from "three/webgpu";
 import { createClipSpaceVertexNode } from "./chunk/createClipSpaceVertexNode.ts";
 import { assignUniforms } from "./assifnUniforms.ts";
+import { mirrorRepeatUV } from "./chunk/mirrorRepeatUV.ts";
 
 export type RenderNodeMaterial3 = ReturnType<typeof createRenderMaterial3>;
 
 /**
  * デモ3でシミューレーション結果に従ってレンダリングを行うシェーダー
- * 入力テクスチャーをそのままレンダリングする
+ * 入力テクスチャーを速度場に従って歪ませる
  */
 export const createRenderMaterial3 = () => {
   // uniforms定義
+  const uTexture = uniformTexture(new THREE.Texture());
   const uImage = uniformTexture(new THREE.Texture());
+  const uTexelSize = uniform(new THREE.Vector2());
   const uTextureSize = uniform(new THREE.Vector2());
   const uImageScale = uniform(new THREE.Vector2(1, 1));
 
@@ -20,7 +31,28 @@ export const createRenderMaterial3 = () => {
   const uv0 = vec2(screenCoordinate.xy).mul(uTextureSize);
   // WebGPUのスクリーン座標系にあわせてYを反転
   const uv = vec2(uv0.x, uv0.y.oneMinus());
-  const fragColor = uImage.sample(uv);
+  const data = uTexture.sample(uv).toVar();
+
+  // data.xyに速度、data.zに圧力、data.wに発散が入っているので、これられの物理量をベースに見た目を作る
+
+  const uvScaled = uv.sub(0.5).mul(uImageScale).add(0.5);
+
+  const inX = uvScaled.x
+    .greaterThanEqual(0.0)
+    .and(uvScaled.x.lessThanEqual(1.0));
+  const inY = uvScaled.y
+    .greaterThanEqual(0.0)
+    .and(uvScaled.y.lessThanEqual(1.0));
+  const inBounds = inX.and(inY);
+
+  const dUV = vec2(1.2).mul(data.xy).mul(uTexelSize);
+  const uvB = mirrorRepeatUV(uvScaled.sub(dUV), uTextureSize);
+  const col = uImage.sample(uvB).rgb;
+
+  const colorIn = vec4(col.add(vec3(data.z.mul(0.01))), 1.0);
+  const colorOut = vec4(0.0, 0.0, 0.0, 1.0);
+
+  const fragColor = select(inBounds, colorIn, colorOut);
   //========== TSLここまで
 
   // マテリアル作成
@@ -29,7 +61,9 @@ export const createRenderMaterial3 = () => {
   material.fragmentNode = fragColor;
 
   return assignUniforms(material, {
+    uTexture,
     uImage,
+    uTexelSize,
     uTextureSize,
     uImageScale,
   });

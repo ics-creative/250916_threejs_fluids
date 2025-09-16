@@ -25,14 +25,11 @@ import {
   type SubtractGradientNodeMaterial,
 } from "./tsl/createSubtractGradientMaterial.ts";
 import {
-  type AdvectSmokeDyeNodeMaterial,
-  createAdvectSmokeDyeMaterial,
-} from "./tsl/createAdvectSmokeDyeMaterial.ts";
+  type AdvectDyeNodeMaterial,
+  createAdvectDyeMaterial,
+} from "./tsl/createAdvectDyeMaterial.ts";
+import { createBlitImageMaterial } from "./tsl/createBlitImageMaterial.ts";
 import { PointerManager } from "./PointerManager.ts";
-import {
-  createInjectDyeMaterial,
-  type InjectDyeNodeMaterial,
-} from "./tsl/createInjectDyeMaterial.ts";
 
 // シミュレーション用のパラメーター
 const simulationConfig = {
@@ -72,7 +69,6 @@ let dataHeight = Math.round(
   window.innerHeight * window.devicePixelRatio * simulationConfig.pixelRatio,
 );
 let texelSize = new THREE.Vector2();
-let screenSize = new THREE.Vector2();
 
 // シミューレーション結果を格納するテクスチャー
 let dataTexture: THREE.RenderTarget;
@@ -91,8 +87,7 @@ let advectVelShader: AdvectVelocityNodeMaterial;
 let divergenceShader: DivergenceNodeMaterial;
 let pressureShader: PressureJacobiNodeMaterial;
 let subtractGradientShader: SubtractGradientNodeMaterial;
-let injectDyeShader: InjectDyeNodeMaterial;
-let advectImageShader: AdvectSmokeDyeNodeMaterial;
+let advectImageShader: AdvectDyeNodeMaterial;
 let renderShader: RenderNodeMaterial4;
 
 // 初期化
@@ -178,8 +173,7 @@ async function init() {
   subtractGradientShader = createSubtractGradientMaterial();
 
   // 描画に使用するシェーダーを作成
-  injectDyeShader = createInjectDyeMaterial();
-  advectImageShader = createAdvectSmokeDyeMaterial();
+  advectImageShader = createAdvectDyeMaterial();
   renderShader = createRenderMaterial4();
 
   // 確認のためレンダリング用のシェーダーをデバッグ表示
@@ -188,16 +182,11 @@ async function init() {
   // 背景用テクスチャーのロード
   const loader = new THREE.TextureLoader();
   sourceImageTexture = loader.load("texture_demo4.jpg", () => {
-    renderShader.uniforms.uBGSizePx.value.set(
-      sourceImageTexture.width,
-      sourceImageTexture.height,
-    );
     onWindowResize();
   });
   sourceImageTexture.minFilter = THREE.LinearMipMapLinearFilter;
   sourceImageTexture.magFilter = THREE.LinearFilter;
   sourceImageTexture.colorSpace = THREE.SRGBColorSpace;
-  renderShader.uniforms.uBackground.value = sourceImageTexture;
 
   // イベントの登録・初期化時点でのサイズ設定処理
   window.addEventListener("resize", onWindowResize);
@@ -235,19 +224,74 @@ function onWindowResize() {
 
   // シェーダーで使用するデータテクスチャーの1ピクセルごとのサイズをシェーダー定数に設定し直す
   texelSize.set(1 / dataWidth, 1 / dataHeight);
-  screenSize.set(1 / newWidth, 1 / newHeight);
   addForceShader.uniforms.uTexelSize.value.copy(texelSize);
   advectVelShader.uniforms.uTexelSize.value.copy(texelSize);
   divergenceShader.uniforms.uTexelSize.value.copy(texelSize);
   pressureShader.uniforms.uTexelSize.value.copy(texelSize);
   subtractGradientShader.uniforms.uTexelSize.value.copy(texelSize);
-  injectDyeShader.uniforms.uTextureSize.value.copy(screenSize);
   advectImageShader.uniforms.uTexelSize.value.copy(texelSize);
-  advectImageShader.uniforms.uTextureSize.value.copy(screenSize);
+  advectImageShader.uniforms.uTextureSize.value.set(
+    1 / newWidth,
+    1 / newHeight,
+  );
+  renderShader.uniforms.uTextureSize.value.set(1 / newWidth, 1 / newHeight);
 
-  renderShader.uniforms.uDyeTexel.value.copy(screenSize);
-  renderShader.uniforms.uScreenTexel.value.copy(screenSize);
-  renderShader.uniforms.uScreenSizePx.value.set(newWidth, newHeight);
+  // 画面サイズに応じて背景用テクスチャーを再転送
+  blitImage();
+
+  // 背景用テクスチャーをセンタリングするためのパラメーターをシェーダー定数に設定
+  if (renderShader.uniforms.uImage.value.source?.data) {
+    renderShader.uniforms.uImageScale.value.copy(
+      getImageScale(
+        newWidth,
+        newHeight,
+        renderShader.uniforms.uImage.value.width,
+        renderShader.uniforms.uImage.value.height,
+      ),
+    );
+  }
+}
+
+/**
+ * 背景用テクスチャーを画面サイズに応じたテクスチャーに転送する
+ */
+function blitImage() {
+  // 初期化
+  const shader = createBlitImageMaterial(
+    renderer.backend.coordinateSystem === THREE.WebGPUCoordinateSystem,
+  );
+  const uniforms = shader.uniforms;
+
+  uniforms.uImage.value = sourceImageTexture;
+  uniforms.uTextureSize.value.set(
+    1 / imageRenderTarget.width,
+    1 / imageRenderTarget.height,
+  );
+  uniforms.uImageScale.value.copy(
+    getImageScale(
+      imageRenderTarget.width,
+      imageRenderTarget.height,
+      sourceImageTexture.width,
+      sourceImageTexture.height,
+    ),
+  );
+  render(shader, imageTexture);
+}
+
+/**
+ * 画面サイズとテクスチャーサイズに応じて縦横比を保ったままセンタリングできるパラメータを取得する
+ */
+function getImageScale(
+  screenW: number,
+  screenH: number,
+  imageW: number,
+  imageH: number,
+) {
+  const screenRatio = screenW / screenH;
+  const imageRatio = imageW / imageH;
+  const w = screenRatio >= imageRatio ? screenRatio / imageRatio : 1.0;
+  const h = screenRatio >= imageRatio ? 1.0 : imageRatio / screenRatio;
+  return new THREE.Vector2(w, h);
 }
 
 /**
@@ -324,38 +368,18 @@ function frame(time: number) {
       render(shader, dataRenderTarget);
       swapTexture();
     }
-  }
 
-  if (pointerManager.isPointerDown) {
-    // インクの注入
-    const shader = injectDyeShader;
-    const uniforms = shader.uniforms;
+    {
+      // ピクセルの移流
+      const shader = advectImageShader;
+      const uniforms = shader.uniforms;
 
-    uniforms.uImage.value = imageTexture.texture;
-    uniforms.uForceCenter.value.copy(
-      pointerManager.pointer.clone().multiply(texelSize),
-    );
-    uniforms.uForceRadius.value = simulationConfig.forceRadius;
-    uniforms.uDyeColor.value.set(0.2, 0.2, 0.2);
-    uniforms.uInjectGain.value = 10;
-
-    render(shader, imageRenderTarget);
-    [imageTexture, imageRenderTarget] = [imageRenderTarget, imageTexture];
-  }
-
-  {
-    // インクの移流
-    const shader = advectImageShader;
-    const uniforms = shader.uniforms;
-
-    uniforms.uImage.value = imageTexture.texture;
-    uniforms.uData.value = dataTexture.texture;
-    uniforms.uDeltaT.value = deltaT;
-    uniforms.uDyeAdvectScale.value = 10;
-    uniforms.uHalfLife.value = 0.3;
-
-    render(shader, imageRenderTarget);
-    [imageTexture, imageRenderTarget] = [imageRenderTarget, imageTexture];
+      uniforms.uImage.value = imageTexture.texture;
+      uniforms.uData.value = dataTexture.texture;
+      uniforms.uDeltaT.value = simulationDeltaT;
+      render(shader, imageRenderTarget);
+      [imageTexture, imageRenderTarget] = [imageRenderTarget, imageTexture];
+    }
   }
 
   {
@@ -363,12 +387,7 @@ function frame(time: number) {
     const shader = renderShader;
     const uniforms = shader.uniforms;
 
-    uniforms.uDye.value = imageTexture.texture;
-    uniforms.uRefractAmp.value = 0.9;
-    uniforms.uDensityK.value = 0.9;
-    uniforms.uSmokeGain.value = 0.8;
-    uniforms.uTimeStep.value = time * 0.0001;
-
+    uniforms.uImage.value = imageTexture.texture;
     render(shader, null);
   }
 

@@ -24,7 +24,15 @@ import {
   createSubtractGradientMaterial,
   type SubtractGradientNodeMaterial,
 } from "./tsl/createSubtractGradientMaterial.ts";
+import {
+  type AdvectSmokeDyeNodeMaterial,
+  createAdvectSmokeDyeMaterial,
+} from "./tsl/createAdvectSmokeDyeMaterial.ts";
 import { PointerManager } from "./PointerManager.ts";
+import {
+  createInjectDyeMaterial,
+  type InjectDyeNodeMaterial,
+} from "./tsl/createInjectDyeMaterial.ts";
 
 // シミュレーション用のパラメーター
 const simulationConfig = {
@@ -35,14 +43,14 @@ const simulationConfig = {
   // マウスを外力として使用する際に影響を与える半径サイズ
   forceRadius: 20,
   // マウスを外力として使用する際のちからの係数
-  forceCoefficient: 500,
+  forceCoefficient: 1000,
   /**
    * 移流時の減衰
    * 1.0に近づけることで高粘度な流体のような見た目にできる
    * 1以上にはしない
    * あくまで粘度っぽさであり、粘性項とは無関係
    */
-  dissipation: 0.96,
+  dissipation: 0.996,
 };
 
 // 時間差分計算用の一時変数
@@ -64,10 +72,18 @@ let dataHeight = Math.round(
   window.innerHeight * window.devicePixelRatio * simulationConfig.pixelRatio,
 );
 let texelSize = new THREE.Vector2();
+let screenSize = new THREE.Vector2();
 
 // シミューレーション結果を格納するテクスチャー
 let dataTexture: THREE.RenderTarget;
 let dataRenderTarget: THREE.RenderTarget;
+
+// 背景画像に使用するテクスチャー
+let sourceImageTexture: THREE.Texture;
+
+// 背景画像の更新結果を格納するテクスチャー
+let imageTexture: THREE.RenderTarget;
+let imageRenderTarget: THREE.RenderTarget;
 
 // シミュレーション及び描画に使用するTSLシェーダーを設定したマテリアル
 let addForceShader: AddForceNodeMaterial;
@@ -75,6 +91,8 @@ let advectVelShader: AdvectVelocityNodeMaterial;
 let divergenceShader: DivergenceNodeMaterial;
 let pressureShader: PressureJacobiNodeMaterial;
 let subtractGradientShader: SubtractGradientNodeMaterial;
+let injectDyeShader: InjectDyeNodeMaterial;
+let advectImageShader: AdvectSmokeDyeNodeMaterial;
 let renderShader: RenderNodeMaterial1;
 
 // 初期化
@@ -130,6 +148,28 @@ async function init() {
   clearRenderTarget(dataTexture);
   clearRenderTarget(dataRenderTarget);
 
+  // 背景の更新を書き込むテクスチャーをPing-Pong用に2つ作成。
+  const imageRtOptions = {
+    wrapS: THREE.ClampToEdgeWrapping,
+    wrapT: THREE.ClampToEdgeWrapping,
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    format: THREE.RGBAFormat,
+    type: THREE.HalfFloatType,
+    depthBuffer: false,
+    stencilBuffer: false,
+  };
+  imageTexture = new THREE.RenderTarget(
+    window.innerWidth,
+    window.innerHeight,
+    imageRtOptions,
+  );
+  imageRenderTarget = new THREE.RenderTarget(
+    window.innerWidth,
+    window.innerHeight,
+    imageRtOptions,
+  );
+
   // シミュレーションで使用するシェーダーを作成
   addForceShader = createAddForceMaterial();
   advectVelShader = createAdvectVelocityMaterial();
@@ -138,10 +178,26 @@ async function init() {
   subtractGradientShader = createSubtractGradientMaterial();
 
   // 描画に使用するシェーダーを作成
+  injectDyeShader = createInjectDyeMaterial();
+  advectImageShader = createAdvectSmokeDyeMaterial();
   renderShader = createRenderMaterial1();
 
   // 確認のためレンダリング用のシェーダーをデバッグ表示
   await debugShader(renderShader);
+
+  // 背景用テクスチャーのロード
+  const loader = new THREE.TextureLoader();
+  sourceImageTexture = loader.load("texture_demo1.jpg", () => {
+    renderShader.uniforms.uBGSizePx.value.set(
+      sourceImageTexture.width,
+      sourceImageTexture.height,
+    );
+    onWindowResize();
+  });
+  sourceImageTexture.minFilter = THREE.LinearMipMapLinearFilter;
+  sourceImageTexture.magFilter = THREE.LinearFilter;
+  sourceImageTexture.colorSpace = THREE.SRGBColorSpace;
+  renderShader.uniforms.uBackground.value = sourceImageTexture;
 
   // イベントの登録・初期化時点でのサイズ設定処理
   window.addEventListener("resize", onWindowResize);
@@ -158,17 +214,17 @@ async function init() {
  * シミュレーション用のデータテクスチャーを画面サイズに応じてリサイズする
  */
 function onWindowResize() {
-  // リサイズ時のお約束処理
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
 
-  // シミュレーション用のデータテクスチャーを画面サイズに応じてリサイズする
   const newWidth = window.innerWidth * window.devicePixelRatio;
   const newHeight = window.innerHeight * window.devicePixelRatio;
   dataWidth = Math.round(newWidth * simulationConfig.pixelRatio);
   dataHeight = Math.round(newHeight * simulationConfig.pixelRatio);
   dataTexture.setSize(dataWidth, dataHeight);
   dataRenderTarget.setSize(dataWidth, dataHeight);
+  imageTexture.setSize(newWidth, newHeight);
+  imageRenderTarget.setSize(newWidth, newHeight);
   // WebGPU座標系の場合はポインタのY座標を反転する
   pointerManager.resizeTarget(
     simulationConfig.pixelRatio,
@@ -179,12 +235,19 @@ function onWindowResize() {
 
   // シェーダーで使用するデータテクスチャーの1ピクセルごとのサイズをシェーダー定数に設定し直す
   texelSize.set(1 / dataWidth, 1 / dataHeight);
+  screenSize.set(1 / newWidth, 1 / newHeight);
   addForceShader.uniforms.uTexelSize.value.copy(texelSize);
   advectVelShader.uniforms.uTexelSize.value.copy(texelSize);
   divergenceShader.uniforms.uTexelSize.value.copy(texelSize);
   pressureShader.uniforms.uTexelSize.value.copy(texelSize);
   subtractGradientShader.uniforms.uTexelSize.value.copy(texelSize);
-  renderShader.uniforms.uTextureSize.value.set(1 / newWidth, 1 / newHeight);
+  injectDyeShader.uniforms.uTextureSize.value.copy(screenSize);
+  advectImageShader.uniforms.uTexelSize.value.copy(texelSize);
+  advectImageShader.uniforms.uTextureSize.value.copy(screenSize);
+
+  renderShader.uniforms.uDyeTexel.value.copy(screenSize);
+  renderShader.uniforms.uScreenTexel.value.copy(screenSize);
+  renderShader.uniforms.uScreenSizePx.value.set(newWidth, newHeight);
 }
 
 /**
@@ -194,7 +257,6 @@ function onWindowResize() {
 function frame(time: number) {
   const deltaT = (time - previousTime) / 1000;
 
-  // 1. 外力の適用：速度場に外力を加算します。
   if (pointerManager.isPointerDown) {
     // 外力の注入
     const shader = addForceShader;
@@ -219,9 +281,8 @@ function frame(time: number) {
 
   // タイムスケールに合わせてシミュレーションステップを実行
   const stepCount = Math.min(Math.max(Math.floor(deltaT * 240), 1), 8);
-  const simulationDeltaT = deltaT / stepCount;
   for (let i = 0; i < stepCount; i++) {
-    // 2. 移流の計算：セミラグランジュ法を使って速度場を補間し、移流を適用します。
+    const simulationDeltaT = deltaT / stepCount;
     {
       // 速度の移流
       const shader = advectVelShader;
@@ -234,7 +295,6 @@ function frame(time: number) {
       swapTexture();
     }
 
-    // 3. 移流の計算：現在速度と経過時間から前ステップの速度を参照することで移流を適用します。
     {
       // 発散の計算
       const shader = divergenceShader;
@@ -245,7 +305,6 @@ function frame(time: number) {
       swapTexture();
     }
 
-    // 4. 圧力の計算：速度と発散から非圧縮条件を満たすように圧力を計算します。
     for (let i = 0; i < simulationConfig.solverIteration; i++) {
       // 圧力の計算
       const shader = pressureShader;
@@ -256,7 +315,6 @@ function frame(time: number) {
       swapTexture();
     }
 
-    // 5. 速度場の更新：計算された圧力を使って速度場を更新します。
     {
       // 圧力勾配の減算
       const shader = subtractGradientShader;
@@ -268,14 +326,49 @@ function frame(time: number) {
     }
   }
 
-  // 6. 描画：更新された速度場を使って流体の見た目をレンダリングします。
+  if (pointerManager.isPointerDown) {
+    // インクの注入
+    const shader = injectDyeShader;
+    const uniforms = shader.uniforms;
+
+    uniforms.uImage.value = imageTexture.texture;
+    uniforms.uForceCenter.value.copy(
+      pointerManager.pointer.clone().multiply(texelSize),
+    );
+    uniforms.uForceRadius.value = simulationConfig.forceRadius;
+    uniforms.uDyeColor.value.set(0.2, 0.2, 0.2);
+    uniforms.uInjectGain.value = 10;
+
+    render(shader, imageRenderTarget);
+    [imageTexture, imageRenderTarget] = [imageRenderTarget, imageTexture];
+  }
+
+  {
+    // インクの移流
+    const shader = advectImageShader;
+    const uniforms = shader.uniforms;
+
+    uniforms.uImage.value = imageTexture.texture;
+    uniforms.uData.value = dataTexture.texture;
+    uniforms.uDeltaT.value = deltaT;
+    uniforms.uDyeAdvectScale.value = 10;
+    uniforms.uHalfLife.value = 0.3;
+
+    render(shader, imageRenderTarget);
+    [imageTexture, imageRenderTarget] = [imageRenderTarget, imageTexture];
+  }
+
   {
     // 描画
     const shader = renderShader;
     const uniforms = shader.uniforms;
 
-    uniforms.uTexture.value = dataTexture.texture;
+    uniforms.uDye.value = imageTexture.texture;
+    uniforms.uRefractAmp.value = 0.9;
+    uniforms.uDensityK.value = 0.9;
+    uniforms.uSmokeGain.value = 0.8;
     uniforms.uTimeStep.value = time * 0.0001;
+
     render(shader, null);
   }
 

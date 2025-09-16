@@ -35,14 +35,14 @@ const simulationConfig = {
   // マウスを外力として使用する際に影響を与える半径サイズ
   forceRadius: 20,
   // マウスを外力として使用する際のちからの係数
-  forceCoefficient: 1000,
+  forceCoefficient: 500,
   /**
    * 移流時の減衰
    * 1.0に近づけることで高粘度な流体のような見た目にできる
    * 1以上にはしない
    * あくまで粘度っぽさであり、粘性項とは無関係
    */
-  dissipation: 0.996,
+  dissipation: 0.96,
 };
 
 // 時間差分計算用の一時変数
@@ -68,9 +68,6 @@ let texelSize = new THREE.Vector2();
 // シミューレーション結果を格納するテクスチャー
 let dataTexture: THREE.RenderTarget;
 let dataRenderTarget: THREE.RenderTarget;
-
-// 背景画像に使用するテクスチャー
-let sourceImageTexture: THREE.Texture;
 
 // シミュレーション及び描画に使用するTSLシェーダーを設定したマテリアル
 let addForceShader: AddForceNodeMaterial;
@@ -146,15 +143,6 @@ async function init() {
   // 確認のためレンダリング用のシェーダーをデバッグ表示
   await debugShader(renderShader);
 
-  // 背景用テクスチャーのロード
-  const loader = new THREE.TextureLoader();
-  sourceImageTexture = loader.load("texture_demo2.jpg", () => {
-    onWindowResize();
-  });
-  sourceImageTexture.minFilter = THREE.LinearMipMapLinearFilter;
-  sourceImageTexture.magFilter = THREE.LinearFilter;
-  sourceImageTexture.colorSpace = THREE.SRGBColorSpace;
-
   // イベントの登録・初期化時点でのサイズ設定処理
   window.addEventListener("resize", onWindowResize);
   pointerManager.init(renderer.domElement);
@@ -196,36 +184,7 @@ function onWindowResize() {
   divergenceShader.uniforms.uTexelSize.value.copy(texelSize);
   pressureShader.uniforms.uTexelSize.value.copy(texelSize);
   subtractGradientShader.uniforms.uTexelSize.value.copy(texelSize);
-  renderShader.uniforms.uTexelSize.value.copy(texelSize);
   renderShader.uniforms.uTextureSize.value.set(1 / newWidth, 1 / newHeight);
-
-  // 背景用テクスチャーをセンタリングするためのパラメーターをシェーダー定数に設定
-  if (renderShader.uniforms.uImage.value.source?.data) {
-    renderShader.uniforms.uImageScale.value.copy(
-      getImageScale(
-        newWidth,
-        newHeight,
-        renderShader.uniforms.uImage.value.width,
-        renderShader.uniforms.uImage.value.height,
-      ),
-    );
-  }
-}
-
-/**
- * 画面サイズとテクスチャーサイズに応じて縦横比を保ったままセンタリングできるパラメータを取得する
- */
-function getImageScale(
-  screenW: number,
-  screenH: number,
-  imageW: number,
-  imageH: number,
-) {
-  const screenRatio = screenW / screenH;
-  const imageRatio = imageW / imageH;
-  const w = screenRatio >= imageRatio ? screenRatio / imageRatio : 1.0;
-  const h = screenRatio >= imageRatio ? 1.0 : imageRatio / screenRatio;
-  return new THREE.Vector2(w, h);
 }
 
 /**
@@ -235,6 +194,7 @@ function getImageScale(
 function frame(time: number) {
   const deltaT = (time - previousTime) / 1000;
 
+  // 1. 外力の適用：速度場に外力を加算します。
   if (pointerManager.isPointerDown) {
     // 外力の注入
     const shader = addForceShader;
@@ -261,6 +221,7 @@ function frame(time: number) {
   const stepCount = Math.min(Math.max(Math.floor(deltaT * 240), 1), 8);
   const simulationDeltaT = deltaT / stepCount;
   for (let i = 0; i < stepCount; i++) {
+    // 2. 移流の計算：セミラグランジュ法を使って速度場を補間し、移流を適用します。
     {
       // 速度の移流
       const shader = advectVelShader;
@@ -273,6 +234,7 @@ function frame(time: number) {
       swapTexture();
     }
 
+    // 3. 移流の計算：現在速度と経過時間から前ステップの速度を参照することで移流を適用します。
     {
       // 発散の計算
       const shader = divergenceShader;
@@ -283,6 +245,7 @@ function frame(time: number) {
       swapTexture();
     }
 
+    // 4. 圧力の計算：速度と発散から非圧縮条件を満たすように圧力を計算します。
     for (let i = 0; i < simulationConfig.solverIteration; i++) {
       // 圧力の計算
       const shader = pressureShader;
@@ -293,6 +256,7 @@ function frame(time: number) {
       swapTexture();
     }
 
+    // 5. 速度場の更新：計算された圧力を使って速度場を更新します。
     {
       // 圧力勾配の減算
       const shader = subtractGradientShader;
@@ -304,13 +268,14 @@ function frame(time: number) {
     }
   }
 
+  // 6. 描画：更新された速度場を使って流体の見た目をレンダリングします。
   {
     // 描画
     const shader = renderShader;
     const uniforms = shader.uniforms;
 
     uniforms.uTexture.value = dataTexture.texture;
-    renderShader.uniforms.uImage.value = sourceImageTexture;
+    uniforms.uTimeStep.value = time * 0.0001;
     render(shader, null);
   }
 
