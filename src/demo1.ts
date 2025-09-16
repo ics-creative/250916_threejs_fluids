@@ -1,38 +1,14 @@
 import * as THREE from "three";
-import { WebGPURenderer, NodeMaterial } from "three/webgpu";
-import {
-  createDivergenceNodeMaterial,
-  type DivergenceNodeMaterial,
-} from "./tsl/createDivergenceMaterial.ts";
-import {
-  type AddForceNodeMaterial,
-  createAddForceMaterial,
-} from "./tsl/createAddForceMaterial.ts";
-import {
-  createRenderMaterial1,
-  type RenderNodeMaterial1,
-} from "./tsl/createRenderMaterial1.ts";
-import {
-  type AdvectVelocityNodeMaterial,
-  createAdvectVelocityMaterial,
-} from "./tsl/createAdvectVelocityMaterial.ts";
-import {
-  createPressureJacobiMaterial,
-  type PressureJacobiNodeMaterial,
-} from "./tsl/createPressureJacobiMaterial.ts";
-import {
-  createSubtractGradientMaterial,
-  type SubtractGradientNodeMaterial,
-} from "./tsl/createSubtractGradientMaterial.ts";
-import {
-  type AdvectSmokeDyeNodeMaterial,
-  createAdvectSmokeDyeMaterial,
-} from "./tsl/createAdvectSmokeDyeMaterial.ts";
-import { PointerManager } from "./PointerManager.ts";
-import {
-  createInjectDyeMaterial,
-  type InjectDyeNodeMaterial,
-} from "./tsl/createInjectDyeMaterial.ts";
+import { NodeMaterial, WebGPURenderer } from "three/webgpu";
+import { createDivergenceNodeMaterial } from "./tsl/createDivergenceMaterial";
+import { createAddForceMaterial } from "./tsl/createAddForceMaterial";
+import { createRenderMaterial1 } from "./tsl/createRenderMaterial1";
+import { createAdvectVelocityMaterial } from "./tsl/createAdvectVelocityMaterial";
+import { createPressureJacobiMaterial } from "./tsl/createPressureJacobiMaterial";
+import { createSubtractGradientMaterial } from "./tsl/createSubtractGradientMaterial";
+import { createAdvectSmokeDyeMaterial } from "./tsl/createAdvectSmokeDyeMaterial";
+import { PointerManager } from "./PointerManager";
+import { createInjectDyeMaterial } from "./tsl/createInjectDyeMaterial";
 
 // シミュレーション用のパラメーター
 const simulationConfig = {
@@ -62,11 +38,11 @@ let previousTime = 0.0;
 // マウス・タッチイベントを管理するオブジェクト
 const pointerManager = new PointerManager();
 // ダンピング適用後のフィルタ座標
-let filteredPointer = new THREE.Vector2(-1, -1);
-let prevFilteredPointer = new THREE.Vector2(-1, -1);
+const filteredPointer = new THREE.Vector2(-1, -1);
+const prevFilteredPointer = new THREE.Vector2(-1, -1);
 let isPointerFilterActive = false;
-let springTarget = new THREE.Vector2(-1, -1);
-let filteredVelocity = new THREE.Vector2(0, 0);
+const springTarget = new THREE.Vector2(-1, -1);
+const filteredVelocity = new THREE.Vector2(0, 0);
 // 半径アニメーション用の状態
 const radiusGrowDuration = 0.3; // 拡大 0.3s
 const radiusDecayDuration = 1.0; // 縮小 1.0s
@@ -76,14 +52,10 @@ let radiusAnimEnd = 0.0;
 let radiusAnimStartTimeSec = 0.0;
 let radiusAnimDuration = 0.0;
 let wasPointerDown = false;
-let lastInjectPointer = new THREE.Vector2(-1, -1);
-let lastActiveFilteredPointer = new THREE.Vector2(-1, -1);
+const lastInjectPointer = new THREE.Vector2(-1, -1);
+const lastActiveFilteredPointer = new THREE.Vector2(-1, -1);
 
 // Three.jsのレンダリングに必要な一式
-let renderer: WebGPURenderer;
-let scene: THREE.Scene;
-let camera: THREE.OrthographicCamera;
-let quad: THREE.Mesh;
 
 // シミュレーションのサイズ定義。画面リサイズに応じて変更する。よく使用するので変数化しておく
 let dataWidth = Math.round(
@@ -92,143 +64,121 @@ let dataWidth = Math.round(
 let dataHeight = Math.round(
   window.innerHeight * window.devicePixelRatio * simulationConfig.pixelRatio,
 );
-let texelSize = new THREE.Vector2();
-let screenSize = new THREE.Vector2();
+const texelSize = new THREE.Vector2();
+const screenSize = new THREE.Vector2();
 
 // シミューレーション結果を格納するテクスチャー
 let dataTexture: THREE.RenderTarget;
 let dataRenderTarget: THREE.RenderTarget;
 
 // 背景画像に使用するテクスチャー
-let sourceImageTexture: THREE.Texture;
 
 // 背景画像の更新結果を格納するテクスチャー
 let imageTexture: THREE.RenderTarget;
 let imageRenderTarget: THREE.RenderTarget;
 
 // シミュレーション及び描画に使用するTSLシェーダーを設定したマテリアル
-let addForceShader: AddForceNodeMaterial;
-let advectVelShader: AdvectVelocityNodeMaterial;
-let divergenceShader: DivergenceNodeMaterial;
-let pressureShader: PressureJacobiNodeMaterial;
-let subtractGradientShader: SubtractGradientNodeMaterial;
-let injectDyeShader: InjectDyeNodeMaterial;
-let advectImageShader: AdvectSmokeDyeNodeMaterial;
-let renderShader: RenderNodeMaterial1;
 
 // 初期化
-await init();
-// 実行開始
-frame(performance.now());
+// WebGPURendererの初期化
+// 本デモはTSL及びNodeMaterialを使用しているため、WebGLRendererではなくWebGPURendererを使用する
+// WebGPURendererはWebGPUが非対応の環境ではフォールバックとしてWebGLで表示される
+// WebGPURendererで強制的にWebGL表示をしたい場合は、オプションのforceWebGLをtrueにする
+const renderer = new WebGPURenderer({ antialias: true, forceWebGL: false });
+await renderer.init();
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-/**
- * 初期化
- */
-async function init() {
-  // WebGPURendererの初期化
-  // 本デモはTSL及びNodeMaterialを使用しているため、WebGLRendererではなくWebGPURendererを使用する
-  // WebGPURendererはWebGPUが非対応の環境ではフォールバックとしてWebGLで表示される
-  // WebGPURendererで強制的にWebGL表示をしたい場合は、オプションのforceWebGLをtrueにする
-  renderer = new WebGPURenderer({ antialias: true, forceWebGL: false });
-  await renderer.init();
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  document.body.appendChild(renderer.domElement);
+// Three.js用のシーンとカメラを作成
+// カメラは透視投影の必要がないのでOrthographicCamera
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-  // Three.js用のシーンとカメラを作成
-  // カメラは透視投影の必要がないのでOrthographicCamera
-  scene = new THREE.Scene();
-  camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+// 貼り付けるための平面メッシュを作成
+// 使用したいシェーダーに対応したマテリアルを差し替えてrenderer.render()を都度呼び出す
+const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+scene.add(quad);
 
-  // 貼り付けるための平面メッシュを作成
-  // 使用したいシェーダーに対応したマテリアルを差し替えてrenderer.render()を都度呼び出す
-  quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
-  scene.add(quad);
+// シミュレーションデータを書き込むテクスチャーをPing-Pong用に2つ作成。
+const renderTargetOptions = {
+  wrapS: THREE.ClampToEdgeWrapping,
+  wrapT: THREE.ClampToEdgeWrapping,
+  minFilter: THREE.NearestFilter,
+  magFilter: THREE.NearestFilter,
+  format: THREE.RGBAFormat,
+  type: THREE.FloatType,
+  depthBuffer: false,
+  stencilBuffer: false,
+};
+dataTexture = new THREE.RenderTarget(
+  dataWidth,
+  dataHeight,
+  renderTargetOptions,
+);
+dataRenderTarget = new THREE.RenderTarget(
+  dataWidth,
+  dataHeight,
+  renderTargetOptions,
+);
+clearRenderTarget(dataTexture);
+clearRenderTarget(dataRenderTarget);
 
-  // シミュレーションデータを書き込むテクスチャーをPing-Pong用に2つ作成。
-  const renderTargetOptions = {
-    wrapS: THREE.ClampToEdgeWrapping,
-    wrapT: THREE.ClampToEdgeWrapping,
-    minFilter: THREE.NearestFilter,
-    magFilter: THREE.NearestFilter,
-    format: THREE.RGBAFormat,
-    type: THREE.FloatType,
-    depthBuffer: false,
-    stencilBuffer: false,
-  };
-  dataTexture = new THREE.RenderTarget(
-    dataWidth,
-    dataHeight,
-    renderTargetOptions,
-  );
-  dataRenderTarget = new THREE.RenderTarget(
-    dataWidth,
-    dataHeight,
-    renderTargetOptions,
-  );
-  clearRenderTarget(dataTexture);
-  clearRenderTarget(dataRenderTarget);
+// 背景の更新を書き込むテクスチャーをPing-Pong用に2つ作成。
+const imageRtOptions = {
+  wrapS: THREE.ClampToEdgeWrapping,
+  wrapT: THREE.ClampToEdgeWrapping,
+  minFilter: THREE.LinearFilter,
+  magFilter: THREE.LinearFilter,
+  format: THREE.RGBAFormat,
+  type: THREE.HalfFloatType,
+  depthBuffer: false,
+  stencilBuffer: false,
+};
+imageTexture = new THREE.RenderTarget(
+  window.innerWidth,
+  window.innerHeight,
+  imageRtOptions,
+);
+imageRenderTarget = new THREE.RenderTarget(
+  window.innerWidth,
+  window.innerHeight,
+  imageRtOptions,
+);
 
-  // 背景の更新を書き込むテクスチャーをPing-Pong用に2つ作成。
-  const imageRtOptions = {
-    wrapS: THREE.ClampToEdgeWrapping,
-    wrapT: THREE.ClampToEdgeWrapping,
-    minFilter: THREE.LinearFilter,
-    magFilter: THREE.LinearFilter,
-    format: THREE.RGBAFormat,
-    type: THREE.HalfFloatType,
-    depthBuffer: false,
-    stencilBuffer: false,
-  };
-  imageTexture = new THREE.RenderTarget(
-    window.innerWidth,
-    window.innerHeight,
-    imageRtOptions,
-  );
-  imageRenderTarget = new THREE.RenderTarget(
-    window.innerWidth,
-    window.innerHeight,
-    imageRtOptions,
-  );
+// シミュレーションで使用するシェーダーを作成
+const addForceShader = createAddForceMaterial();
+const advectVelShader = createAdvectVelocityMaterial();
+const divergenceShader = createDivergenceNodeMaterial();
+const pressureShader = createPressureJacobiMaterial();
+const subtractGradientShader = createSubtractGradientMaterial();
 
-  // シミュレーションで使用するシェーダーを作成
-  addForceShader = createAddForceMaterial();
-  advectVelShader = createAdvectVelocityMaterial();
-  divergenceShader = createDivergenceNodeMaterial();
-  pressureShader = createPressureJacobiMaterial();
-  subtractGradientShader = createSubtractGradientMaterial();
+// 描画に使用するシェーダーを作成
+const injectDyeShader = createInjectDyeMaterial();
+const advectImageShader = createAdvectSmokeDyeMaterial();
+const renderShader = createRenderMaterial1();
 
-  // 描画に使用するシェーダーを作成
-  injectDyeShader = createInjectDyeMaterial();
-  advectImageShader = createAdvectSmokeDyeMaterial();
-  renderShader = createRenderMaterial1();
+// 確認のためレンダリング用のシェーダーをデバッグ表示
+await debugShader(renderShader);
 
-  // 確認のためレンダリング用のシェーダーをデバッグ表示
-  await debugShader(renderShader);
+// 背景用テクスチャーのロード
+const loader = new THREE.TextureLoader();
+const sourceImageTexture = await loader.loadAsync("texture_demo1.jpg");
+renderShader.uniforms.uBGSizePx.value.set(
+  sourceImageTexture.width,
+  sourceImageTexture.height,
+);
+sourceImageTexture.colorSpace = THREE.SRGBColorSpace;
+renderShader.uniforms.uBackground.value = sourceImageTexture;
 
-  // 背景用テクスチャーのロード
-  const loader = new THREE.TextureLoader();
-  sourceImageTexture = loader.load("texture_demo1.jpg", () => {
-    renderShader.uniforms.uBGSizePx.value.set(
-      sourceImageTexture.width,
-      sourceImageTexture.height,
-    );
-    onWindowResize();
-  });
-  sourceImageTexture.minFilter = THREE.LinearMipMapLinearFilter;
-  sourceImageTexture.magFilter = THREE.LinearFilter;
-  sourceImageTexture.colorSpace = THREE.SRGBColorSpace;
-  renderShader.uniforms.uBackground.value = sourceImageTexture;
-
-  // イベントの登録・初期化時点でのサイズ設定処理
-  window.addEventListener("resize", onWindowResize);
-  pointerManager.init(renderer.domElement);
-  pointerManager.addEventListener("firstInteraction", () => {
-    (document.querySelector("#overlay-hint") as HTMLElement)!.style.display =
-      "none";
-  });
-  onWindowResize();
-}
+// イベントの登録・初期化時点でのサイズ設定処理
+window.addEventListener("resize", onWindowResize);
+pointerManager.init(renderer.domElement);
+pointerManager.addEventListener("firstInteraction", () => {
+  const element = document.querySelector<HTMLElement>("#overlay-hint")!;
+  element.style.display = "none";
+});
+onWindowResize();
 
 /**
  * 画面リサイズ時の挙動
@@ -270,6 +220,9 @@ function onWindowResize() {
   renderShader.uniforms.uScreenTexel.value.copy(screenSize);
   renderShader.uniforms.uScreenSizePx.value.set(newWidth, newHeight);
 }
+
+// 実行開始
+frame(performance.now());
 
 /**
  * 毎フレーム実行する関数
@@ -326,7 +279,10 @@ function frame(time: number) {
     filteredPointer.y += filteredVelocity.y * dt * visual;
 
     // 近傍スナップ（微小振動を即収束）
-    if (diff.lengthSq() < 0.5 * 0.5 && filteredVelocity.lengthSq() < 0.5 * 0.5) {
+    if (
+      diff.lengthSq() < 0.5 * 0.5 &&
+      filteredVelocity.lengthSq() < 0.5 * 0.5
+    ) {
       filteredPointer.copy(springTarget);
       filteredVelocity.set(0, 0);
     }
@@ -442,12 +398,15 @@ function frame(time: number) {
     const uniforms = shader.uniforms;
 
     uniforms.uImage.value = imageTexture.texture;
-    const injectCenter = (isPointerFilterActive ? filteredPointer : lastInjectPointer)
+    const injectCenter = (
+      isPointerFilterActive ? filteredPointer : lastInjectPointer
+    )
       .clone()
       .multiply(texelSize);
     uniforms.uForceCenter.value.copy(injectCenter);
     uniforms.uForceRadius.value =
-      simulationConfig.forceRadius * window.devicePixelRatio *
+      simulationConfig.forceRadius *
+      window.devicePixelRatio *
       Math.max(radiusAnimCurrent, 0.0);
     uniforms.uInjectGain.value = 50;
 
@@ -480,8 +439,8 @@ function frame(time: number) {
     // マルチスケール屈折の半径と減衰
     uniforms.uRefractRadius.value = 2.0; // 範囲を広げる
     uniforms.uRefractFalloff.value = 0.6; // 大半径の寄与も残す
-    uniforms.uDensityK.value = 0.5;   // 吸収を弱めて薄さを改善
-    uniforms.uSmokeGain.value = 0.7;  // 白の寄与を少し戻す
+    uniforms.uDensityK.value = 0.5; // 吸収を弱めて薄さを改善
+    uniforms.uSmokeGain.value = 0.7; // 白の寄与を少し戻す
     // 加算合成の強さ（以前のオーバーレイ用のユニフォームを流用）
     uniforms.uOverlayStrength.value = 1.1; // 加算を強める
     uniforms.uOverlayGain.value = 1.4;
