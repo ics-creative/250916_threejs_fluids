@@ -86,7 +86,12 @@ const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
 scene.add(quad);
 
 // シミュレーションデータを書き込むテクスチャーをPing-Pong用に2つ作成。
-const renderTargetOptions = { type: THREE.FloatType };
+const renderTargetOptions = {
+  type: THREE.FloatType,
+  // minFilter / magFilter は計算のため、THREE.NearestFilter を指定
+  minFilter: THREE.NearestFilter,
+  magFilter: THREE.NearestFilter,
+};
 dataTexture = new THREE.RenderTarget(
   dataWidth,
   dataHeight,
