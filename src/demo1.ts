@@ -44,8 +44,8 @@ let isPointerFilterActive = false;
 const springTarget = new THREE.Vector2(-1, -1);
 const filteredVelocity = new THREE.Vector2(0, 0);
 // 半径アニメーション用の状態
-const radiusGrowDuration = 0.3; // 拡大 0.3s
-const radiusDecayDuration = 1.0; // 縮小 1.0s
+const radiusGrowDuration = 0.3; // 拡大　時間（秒）
+const radiusDecayDuration = 2.0; // 縮小　時間（秒）
 let radiusAnimCurrent = 0.0;
 let radiusAnimStart = 0.0;
 let radiusAnimEnd = 0.0;
@@ -160,13 +160,8 @@ function onWindowResize() {
   dataRenderTarget.setSize(dataWidth, dataHeight);
   imageTexture.setSize(newWidth, newHeight);
   imageRenderTarget.setSize(newWidth, newHeight);
-  // WebGPU座標系の場合はポインタのY座標を反転する
-  pointerManager.resizeTarget(
-    config.pixelRatio,
-    renderer.backend.coordinateSystem === THREE.WebGPUCoordinateSystem
-      ? dataHeight
-      : 0,
-  );
+  // シェーダーの座標系に合わせてポインタのY座標を反転する
+  pointerManager.resizeTarget(config.pixelRatio, dataHeight);
 
   // シェーダーで使用するデータテクスチャーの1ピクセルごとのサイズをシェーダー定数に設定し直す
   texelSize.set(1 / dataWidth, 1 / dataHeight);
