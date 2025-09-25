@@ -81,6 +81,7 @@ export class PointerManager extends EventTarget {
   private updatePointer = (cx: number, cy: number) => {
     const x = cx * window.devicePixelRatio * this.pixelRatio;
     const yBase = cy * window.devicePixelRatio * this.pixelRatio;
+    // 常にY座標を反転してシェーダーの座標系と合わせる
     const y = this.flipHeight > 0 ? this.flipHeight - yBase : yBase;
     this.pointer.set(x, y);
   };

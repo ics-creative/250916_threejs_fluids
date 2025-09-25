@@ -1,5 +1,6 @@
 body {
   margin: 0;
+  overflow: hidden;
 }
 #overlay-hint {
   position: fixed;
@@ -11,7 +12,7 @@ body {
 }
 .overlay-content {
   text-align: center;
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: sans-serif;
   padding: 16px 20px;
   border-radius: 14px;
   background: rgba(20, 20, 20, 0.55);
