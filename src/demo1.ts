@@ -128,7 +128,7 @@ renderShader.uniforms.uOverlayGain.value = 1.4;
 
 // 背景用テクスチャーのロード
 const loader = new THREE.TextureLoader();
-const sourceImageTexture = await loader.loadAsync("texture_demo1.jpg");
+const sourceImageTexture = await loader.loadAsync("texture_demo1.avif");
 renderShader.uniforms.uBGSizePx.value.set(
   sourceImageTexture.width,
   sourceImageTexture.height,
